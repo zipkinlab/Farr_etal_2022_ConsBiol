@@ -1,0 +1,47 @@
+model{
+
+mu.b0 ~ dnorm(0, 0.1)
+tau.b0 ~ dgamma(0.1, 0.1)
+mu.a0 ~ dnorm(0, 0.1)
+tau.a0 ~ dgamma(0.1, 0.1)
+mu.o0 ~ dnorm(0, 0.1)
+tau.o0 ~ dgamma(0.1, 0.1)
+mu.g0 ~ dnorm(0, 0.1)
+tau.g0 ~ dgamma(0.1, 0.1)
+
+for(s in 1:nspec){
+log(lambda[s]) <- beta0[s]
+beta0[s] ~ dnorm(mu.b0, tau.b0)
+
+alpha0[s] ~ dnorm(mu.a0, tau.a0)
+omega0[s] ~ dnorm(mu.o0, tau.o0)
+gamma0[s] ~ dnorm(mu.g0, tau.g0)
+
+for(j in 1:nsites){
+
+logit(r[1,j,s]) <- alpha0[s]
+N[1,j,s] ~ dpois(lambda[s])
+
+for(t in 2:nyrs){
+
+logit(r[t,j,s]) <- alpha0[s]
+logit(omega[t-1,j,s]) <- omega0[s]
+S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
+G[t-1,j,s] ~ dpois(gamma[t-1,s])
+N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
+
+}#end t
+}#end j
+
+for(t in 2:nyrs){
+log(gamma[t-1,s]) <- gamma0[s]
+}#end t
+
+}#end s
+
+for(k in 1:nobs){
+y[k] ~ dbern(p[k])
+p[k] <- 1 - pow((1 - r[yr[k], site[k], spec[k]]), N[yr[k], site[k], spec[k]])
+}#end k
+
+}

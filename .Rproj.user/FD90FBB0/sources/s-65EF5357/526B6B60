@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1553788679670.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "526B6B60",
+    "lastKnownWriteTime" : 1555072066,
+    "last_content_update" : 1555072069290,
+    "path" : "~/Users/farrm/Documents/GitHub/HMSNO/DataFormat/DataFormat.R",
+    "project_path" : "DataFormat/DataFormat.R",
+    "properties" : {
+        "cursorPosition" : "26,80",
+        "scrollLine" : "0",
+        "tempName" : "Untitled4"
+    },
+    "relative_order" : 12,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

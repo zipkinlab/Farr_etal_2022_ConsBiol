@@ -1,0 +1,87 @@
+#-------------------#
+#----Format Data----#
+#-------------------#
+
+#-------------------#
+#-Working Directory-#
+#-------------------#
+
+setwd("C:/Users/farrm/Documents/GitHub/HMSNO/DataFormat")
+
+#----------------#
+#-Load Libraries-#
+#----------------#
+
+library(readxl)
+library(dplyr)
+library(reshape2)
+
+#-----------#
+#-Load Data-#
+#-----------#
+
+Bwindi_nig <- read_excel("RawData/Data_Bwindi_nig_sylv_Nov18.xlsx", sheet = 1)
+
+#-------------#
+#-Format Data-#
+#-------------#
+
+Bwindi_nig <- Bwindi_nig[,c(1:7,9)]
+Bwindi_nig[,2:7] <- apply(Bwindi_nig[,2:7], 2, function(y) as.numeric(gsub("-", NA, y)))
+
+#Indices
+nyrs <- as.numeric(Bwindi_nig %>% summarize(n_distinct(Year)))
+#yr <- as.numeric(as.factor(Bwindi_nig$Year))
+nsites <- as.numeric(Bwindi_nig %>% summarize(n_distinct(`deployment ID`)))
+#site <- as.numeric(as.factor(Bwindi_nig$`deployment ID`))
+
+
+
+tst <- melt(Bwindi_nig, id = c("deployment ID", "Year"))
+
+y <- tst$value
+nobs <- length(y)
+
+
+# Bwindi_nig <- Bwindi_nig %>% mutate(v = rowSums(!is.na(Bwindi_nig %>% select(R1, R2, R3, R4, R5, R6))),
+#                       y = rowSums(Bwindi_nig %>% select(R1, R2, R3, R4, R5, R6), na.rm = TRUE))
+# 
+# y <- v <- matrix(NA, ncol = nyrs, nrow = nsites)
+# 
+# for(i in 1:dim(Bwindi_nig)[1]){
+#   y[site[i], yr[i]] <- Bwindi_nig$y[i]
+#   v[site[i], yr[i]] <- Bwindi_nig$v[i]
+# }
+# 
+# nsites <- rep(1:60)
+# removal <- Bwindi_nig %>% mutate(`deployment ID`= as.numeric(as.factor(Bwindi_nig$`deployment ID`))) %>% filter(v==0)
+# rmsites <- removal$`deployment ID`
+# rmID <- removal %>% group_by(Year) %>% summarize(n())
+
+yr <- as.numeric(as.factor(tst$Year))
+site <- as.numeric(as.factor(tst$`deployment ID`))
+
+data <- list(y = y, nobs = nobs, nyrs = nyrs, nsites = nsites, yr = yr, site = site)
+
+Nst <- matrix(NA, nrow = nyrs, ncol = nsites)
+tst2 <- Bwindi_nig %>% mutate(v = rowSums(!is.na(Bwindi_nig %>% select(R1, R2, R3, R4, R5, R6))),
+                      y = rowSums(Bwindi_nig %>% select(R1, R2, R3, R4, R5, R6), na.rm = TRUE))
+for(i in 1:nobs){
+  Nst[yr[i],site[i]] <- tst2$y[i]
+}
+
+Nst <- Nst + 1
+
+inits <- function()list(N = Nst)
+
+params <- c("tau.g", "alpha0", "beta0")
+
+ni <- 13000
+na <- 1000
+nb <- 10000
+nc <- 3
+nt <- 1
+
+out <- jagsUI(data, inits, params, model.file = "../SS.txt", 
+              n.adapt = na, n.chains = nc, n.iter = ni, n.burnin = nb, n.thin = nt, 
+              parallel = TRUE)

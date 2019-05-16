@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1550164107824.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "3E8C4D4A",
+    "lastKnownWriteTime" : 1553187178,
+    "last_content_update" : 1553187178606,
+    "path" : "~/Users/farrm/Documents/GitHub/HMSNO/DataAnalysis/HMSNO.R",
+    "project_path" : "DataAnalysis/HMSNO.R",
+    "properties" : {
+        "cursorPosition" : "6,0",
+        "scrollLine" : "0",
+        "tempName" : "Untitled3"
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

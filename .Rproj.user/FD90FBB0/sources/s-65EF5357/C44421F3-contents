@@ -1,0 +1,234 @@
+# IBIO/ENT/PLB 831 Statistical Methods in E&E
+# Exercise 2
+# Due 19 March 2019
+
+# Model comparison and evaluation II:
+# The likelihood ratio test
+
+# To complete this exercise, fill in the missing R code and answer the questions.
+# Missing R code indicated by #*#. Missing code could be part of a line, a whole line,
+# or multiple lines.
+# Questions to be answered are labeled with QUESTION in all caps. 
+# Answers should be ~1-2 sentences.
+# Note that there are hints at the end of some of the sections.
+# There is an optional bonus at the end. Students who complete the bonus will be held in
+# high esteem.
+
+
+# You did an experiment on the effects of nighttime and daytime heat stress on caterpillar
+# survival. You put 6 caterpillars on 80 plants and randomly assigned plants to receive
+# heat during the day, night, both, or not at all. Then you recorded how many of the 6
+# caterpillars per plant survived to adulthood. You have four main questions:
+# a) Does day heating influence survival?
+# b) Does night heating influence survival?
+# c) Do day and night heating both influence survival additively?
+# d) Do day and night heating influence survival interactively?
+
+
+##########################################################################################
+# Contents
+
+# 0. Set up
+# 1. Load data
+# 2. Prep data
+# 3. Visualize data
+# 4. Fit first models
+# 5. Compare null and full models
+# 6. Reformat the predictor variable
+# 7. Fit the full set of models
+# 8. Now do the full hypothesis testing with the LRT
+# 9. Optional bonus: Compare LRT and AICc inferences
+
+
+
+##########################################################################################
+# 0. Set up
+
+# Install packages if you don't have them:
+# install.packages('ggplot2')
+# install.packages('gpairs')
+# install.packages('lme4')
+# install.packages('bbmle')
+
+# Load packages
+library(ggplot2) # for plotting
+library(gpairs) # for gpairs function, pairwise plotting of multiple variables
+library(lme4) # for GLMMs
+library(bbmle) # for AICc table
+
+
+
+##########################################################################################
+# 1. Load data
+
+d = read.csv('W2_exercise.csv')
+
+# Print data to look for problems
+d # Should look good
+
+
+
+##########################################################################################
+# 2. Prep data
+
+# Make a new variable for number of caterpillars that died
+d$died = d$initial - d$survived
+# Need this because we need survived and died for glmer binomial models
+
+# Hints:
+# a) subtraction! :)
+
+
+
+##########################################################################################
+# 3. Visualize data
+
+# Use the gpairs function from the gpairs package to plot all pairwise relationships
+# Really just one interesting panel here, but it's good to look at them all to get a
+# better understanding of your dataset
+gpairs(d)
+
+# Now plot just the key figure, survived ~ trt (can use base or ggplot2)
+ggplot(data=d, aes(x=trt, y=survived)) +
+	geom_point(position=position_jitter(width=0.1, height=0), alpha=0.5) +
+	stat_summary(col='#009E73') +
+	theme_classic() + ylim(0,6)
+
+
+
+##########################################################################################
+# 4. Fit first models
+
+# First fit a null model
+m0 = glmer(cbind(survived, died) ~ 1 + (1|plantID), family='binomial', data=d)
+
+# Second fit a model using trt to predict survival, call it mf for full model
+mf = glmer(cbind(survived, died) ~ trt + (1|plantID), family='binomial', data=d)
+
+# Hints:
+# a) use glmer from the lme4 package to fit models (GLMMs)
+# b) survival can be modeled like coin flips
+# c) you need to account for correlations in survival among cats on the same plant
+# d) + (1|Z) is the random effect syntax for lme4
+
+
+
+##########################################################################################
+# 5. Compare null and full models
+
+# Use a likelihood ratio test
+anova(m0, mf, test='Chisq')
+
+# QUESTION Does survival differ significantly by heating treatment? What can you say about
+# day versus night or a potential interaction between day and night heating?
+# Yes. Nothing! Because the test is just for the overall effect of "trt".
+
+# Hints:
+# a) anova
+
+
+
+##########################################################################################
+# 6. Reformat the predictor variable
+
+# You need to reformat the predictor into two separate variables so you can do more 
+# specific hypothesis tests. Depending on your R skill level, this may test your
+# wrangling ability. There are many ways to do it. I usually do it using a bunch of $ and
+# [] and ==. However you do it, the goal is to make two new columns from d$trt, one for
+# day and one for night. Put another way, the goal is to have one indicator variable that
+# indicates which plants had daytime heating (including day and day_night) and one
+# indicator variable that indicates which plants had nighttime heating (including night
+# and day_night).
+
+# First make a new variable called day in the d dataframe. Have it be 'ctrl' for all rows
+# except where d$trt is 'day' or 'day_night'. For those rows, make d$day be 'heat'
+d$day = 'ctrl'
+d$day[d$trt == 'day'] = 'heat'
+d$day[d$trt == 'day_night'] = 'heat'
+d$day = factor(d$day) # convert d$day to a factor
+
+# Second, do the analogous thing but for night
+d$night = 'ctrl'
+d$night[d$trt == 'night'] = 'heat'
+d$night[d$trt == 'day_night'] = 'heat'
+d$night = factor(d$night) # convert d$day to a factor
+
+# Compare the results to d$trt to make sure you did this correctly
+d[,c('trt', 'day', 'night')]
+
+
+# Hints:
+# a) the framework I laid out above is just one way to do it. If you don't like my way,
+# you can delete it and do your own way 
+
+
+
+##########################################################################################
+# 7. Fit the full set of models
+
+# Fit the full set of four models that (in addition to m0 above) can be compared to answer
+# these questions:
+# a) Does day heating influence survival?
+# b) Does night heating influence survival?
+# c) Do day and night heating both influence survival additively?
+# d) Do day and night heating influence survival interactively?
+
+# m1: ~ day
+# m2: ~ night
+
+m1 = glmer(cbind(survived, died) ~ day + (1|plantID), family='binomial', data=d)
+m2 = glmer(cbind(survived, died) ~ night + (1|plantID), family='binomial', data=d)
+m3 = glmer(cbind(survived, died) ~ day + night + (1|plantID), family='binomial', data=d)
+m4 = glmer(cbind(survived, died) ~ day * night + (1|plantID), family='binomial', data=d)
+
+# Hints:
+# a) should be very similar to m0 and mf
+
+
+
+##########################################################################################
+# 8. Now do the full hypothesis testing with the LRT
+
+# Report likelihood ratio tests for each question. It's going to be a number of pairwise 
+# comparisons, because that's the deal with the LRT.
+
+# a) Does day heating influence survival?
+anova(m0, m1)
+
+# b) Does night heating influence survival?
+anova(m0, m2)
+
+# c) Do day and night heating both influence survival additively?
+anova(m0, m3)
+anova(m1, m3)
+anova(m2, m3)
+
+# d) Do day and night heating influence survival interactively?
+anova(m3, m4)
+anova(m0, m4)
+
+# QUESTION So what is going on here? What influences survival? Day, night, both
+# additively, and/or both interactively?
+# Day and night heating additively affect caterpillar survival.
+
+
+
+##########################################################################################
+# 9. Optional bonus: Compare LRT and AICc inferences
+
+# Calculate AICc for all models
+
+AICctab(m0,m1,m2,m3,m4, weights=TRUE)
+
+# QUESTION How do our model inferences differ between LRT and AICc?
+# With LRT we fail to reject the null hypothesis that there is no interaction. But with
+# AICc, we say the best model had no interaction, but that the second best model had
+# an interaction and was close to as good as the best model.
+
+# QUESTION Is the interaction a "pretending" variable?
+summary(m4)
+logLik(m3)
+logLik(m4)
+# Yes, looks like the interaction might be a pretending variable. But maybe it's just a
+# very weak interaction? This is one of the weirdnesses of AIC.
+

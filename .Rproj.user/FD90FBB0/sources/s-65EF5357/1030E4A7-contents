@@ -1,0 +1,58 @@
+#-------------------#
+#----Format Data----#
+#-------------------#
+
+#-------------------#
+#-Working Directory-#
+#-------------------#
+
+setwd("C:/Users/farrm/Documents/GitHub/HMSNO/DataFormat")
+
+#----------------#
+#-Load Libraries-#
+#----------------#
+
+library(readxl)
+library(dplyr)
+library(reshape2)
+
+#-----------#
+#-Load Data-#
+#-----------#
+
+Bwindi_nig <- read_excel("RawData/Data_Bwindi_nig_sylv_Nov18.xlsx", sheet = 1)
+
+#-------------#
+#-Format Data-#
+#-------------#
+
+Bwindi_nig <- Bwindi_nig[,c(1:7,9)]
+Bwindi_nig[,2:7] <- apply(Bwindi_nig[,2:7], 2, function(y) as.numeric(gsub("-", NA, y)))
+
+
+nyrs <- as.numeric(Bwindi_nig %>% summarize(n_distinct(Year)))
+nsites <- as.numeric(Bwindi_nig %>% summarize(n_distinct(`deployment ID`)))
+data <- melt(Bwindi_nig, id = c("deployment ID", "Year"))
+y <- data$value
+nobs <- length(y)
+yr <- as.numeric(as.factor(data$Year))
+site <- as.numeric(as.factor(data$`deployment ID`))
+
+jags.data <- list(y = y, nobs = nobs, nyrs = nyrs, nsites = nsites, yr = yr, site = site)
+
+#Inits
+inits <- function()list(N=t(matrix(c(rep(10,nsites),rep(NA,nsites*(nyrs-1))),nrow=nsites,ncol=nyrs)),
+                        S=matrix(5,ncol=nsites,nrow=(nyrs-1)),
+                        G=matrix(2,ncol=nsites,nrow=(nyrs-1)))
+
+params <- c("alpha0", "beta0", "omega0", "gamma0", "N")
+
+ni <- 13000
+na <- 1000
+nb <- 10000
+nc <- 3
+nt <- 1
+
+out <- jagsUI(jags.data, inits, params, model.file = "../SSdyn.txt", 
+              n.adapt = na, n.chains = nc, n.iter = ni, n.burnin = nb, n.thin = nt, 
+              parallel = TRUE)

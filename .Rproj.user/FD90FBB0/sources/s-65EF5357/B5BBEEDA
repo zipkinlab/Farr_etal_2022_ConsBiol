@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1549995844951.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "B5BBEEDA",
+    "lastKnownWriteTime" : 23362753784184879,
+    "last_content_update" : 1549995844951,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "AB199B81",
+        "caption" : "Bwindi_nig",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=Bwindi_nig&cache_key=AB199B81",
+        "displayedObservations" : 480,
+        "environment" : "",
+        "object" : "Bwindi_nig",
+        "preview" : 0,
+        "totalObservations" : 480,
+        "variables" : 19
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

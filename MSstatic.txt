@@ -1,0 +1,31 @@
+model{
+
+mu.a0 ~ dnorm(0, 0.1)
+tau.a0 ~ dgamma(0.1, 0.1)
+
+mu.b0 ~ dnorm(0, 0.1)
+tau.b0 ~ dgamma(0.1, 0.1)
+
+for(j in 1:nsite){
+gamma[j] ~ dnorm(0, tau.g)
+}
+
+tau.g ~ dgamma(0.1, 0.1)
+
+for(i in 1:nspec){
+
+alpha0[i] ~ dnorm(mu.a0, tau.a0)
+beta0[i] ~ dnorm(mu.b0, tau.b0)
+
+for(t in 1:nyrs){
+for(j in 1:nsite){
+y[i,t,j] ~ dbin(v[t,j], p[i,t,j])
+p[i,t,j] <- 1 - pow((1 - r[i,t,j]), N[i,t,j])
+logit(r[i,t,j]) <- alpha0[i]
+N[i,t,j] <- dpois(lambda[i,t,j])
+log(lambda[i,t,j]) <- beta0[i] + gamma[j]
+}#end j
+}#end t
+}#end i
+
+}

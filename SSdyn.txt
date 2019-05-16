@@ -1,0 +1,35 @@
+model{
+
+log(lambda) <- beta0
+beta0 ~ dnorm(0, 0.1)
+
+alpha0 ~ dnorm(0, 0.1)
+omega0 ~ dnorm(0, 0.1)
+gamma0 ~ dnorm(0, 0.1)
+
+for(j in 1:nsites){
+
+logit(r[1,j]) <- alpha0
+N[1,j] ~ dpois(lambda)
+
+for(t in 2:nyrs){
+
+logit(r[t,j]) <- alpha0
+logit(omega[t-1,j]) <- omega0
+S[t-1,j] ~ dbin(omega[t-1,j], N[t-1,j])
+G[t-1,j] ~ dpois(gamma[t-1])
+N[t,j] <- S[t-1,j] + G[t-1,j]
+
+}#end t
+}#end j
+
+for(t in 2:nyrs){
+log(gamma[t-1]) <- gamma0
+}
+
+for(k in 1:nobs){
+y[k] ~ dbern(p[k])
+p[k] <- 1 - pow((1 - r[yr[k], site[k]]), N[yr[k], site[k]])
+}
+
+}

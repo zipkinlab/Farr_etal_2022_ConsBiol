@@ -1,0 +1,359 @@
+# IBIO/ENT/PLB 831 Statistical Methods in E&E
+# Exercise 5
+# Due 2 April 2019
+
+# Model comparison and evaluation V:
+# Model evaluation
+
+# To complete this exercise, fill in the missing R code and answer the questions.
+# Missing R code indicated by #*#. Missing code could be part of a line, a whole line,
+# or multiple lines.
+# Questions to be answered are labeled with QUESTION in all caps. 
+# Answers should be ~1-2 sentences.
+# Note that there are hints at the end of some of the sections.
+# There's an optional bonus at the end.
+
+
+# This exercise (5) builds off of exercise 4 and uses the same dataset. The focus of this
+# exercise will be evaluating the two models you built for exercise 4. Recall that both 
+# models had the same predictors and random effect: ~ sand + temp + (1|cage). But they 
+# differed in response variable: mandible length or log( mandible length ).
+
+# You did an experiment on rapid evolution using flour beetles (Tribolium castaneum), a 
+# model lab system in evolution and ecology. You question was how does temperature and
+# foraging substrate influence the evolution of mandible length, a key morphological trait
+# related to foraging efficiency. You raised experimental populations of flour beetles in
+# 18 cages. In 9 of the cages, you provided them with a diet of pure oats. In the other 9
+# cages, you mixed their oats with coarse sand to make foraging more difficult. You
+# manipulated temperature by placing each cage in an incubator set to differing 
+# temperatures. You ran the experiment for one year (~12 generations), and at the end of
+# the experiment you measured the mandible length of 3 beetles per cage (randomly chosen).
+# You want to know how temperature and sand influenced evolution of mandible length.
+
+# Response variable:
+# y (mandible length) (0.5 - 35.5)
+
+# Predictor variables:
+# temp (10, 12.5, 15, 17.5, 20, 22.5, 25, 27.5, or 30)
+# sand ("ctrl" or "sand")
+
+# Grouping factor:
+# cage (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
+
+
+##########################################################################################
+# Contents
+
+# 0. Set up
+# 1. Load data
+# 2. Prep data
+# 3. Visualize data
+# 4. Fit and evaluate the first model with y
+# 5. Evaluate m1 by plotting model-predicted observations over your real observations
+# 6. Fit and evaluate the second model with log(y)
+# 7. Evaluate m2 by plotting model-predicted observations over your real observations
+# 8. BONUS: Do section 7 again, but back-transform 
+
+
+
+##########################################################################################
+# 0. Set up
+
+# Install packages if you don't have them:
+# install.packages('ggplot2')
+# install.packages('GGally')
+# install.packages('lme4')
+# install.packages('piecewiseSEM')
+
+
+# Load packages
+library(ggplot2) # for plotting
+library(GGally) # for ggpairs function, pairwise plotting of multiple variables
+library(lme4) # for GLMMs
+library(piecewiseSEM) # for the nice rsquared() function
+
+# Tell R not use print numbers with scientific notation
+# Makes them easier to understand quickly, I think
+options(scipen=10)
+
+
+
+##########################################################################################
+# 1. Load data
+
+d = read.csv('W5_exercise.csv')
+
+# Print data to look for problems
+d # Should look good
+
+
+
+##########################################################################################
+# 2. Prep data
+
+# Center the continuous predictor (temp) by subtracting the mean from each value
+# The mean of the centered variable will be zero. This makes it easier for R to fit your
+# model because your y-intercept (y-value where x=0) will be right in the middle of your
+# data. This also makes the intercept more meaningful and easier to interpret... it's the
+# expected y when x=0.
+d$temp_centered = d$temp - mean(d$temp)
+d$temp_centered
+
+# It's pretty much always a good idea to center continuous predictors.
+
+# We're going to add a sand indicator (dummy) variable because it will come in handy below
+d$sand_dummy = 0
+d$sand_dummy[d$sand == 'sand'] = 1
+
+
+# Remember from exercise 4 we found an issue with analyzing length as the response 
+# variable, so we decided to try analyzing log( length ) as the response. Let's make that
+# variable here.
+d$logy = log(d$y)
+
+
+
+##########################################################################################
+# 3. Visualize data
+
+# Normally, you would use the ggpairs function from the GGally package to plot all 
+# pairwise relationships, but you did that last time, so no need to do it again
+# ggpairs(d)
+
+# Visualize your two potential models y ~ sand + temp and log(y) ~ sand + temp
+# Have one plot for each response. Color points by sand treatment. Don't add predictions 
+# yet.
+plot(y ~ temp, data=d, col=sand_dummy+1)
+plot(logy ~ temp, data=d, col=sand_dummy+1)
+
+# Hints:
+# a) If you're plotting with base, a quick way to color the points different colors is to
+# set col to the dummy variable + 1. I.e., col=sand_dummy+1. In R, 1 = black and 2 = red.
+
+
+
+##########################################################################################
+# 4. Fit and evaluate the first model with y
+
+# The first model, with y on the arithmetic scale
+m1 = lmer(y ~ sand + temp_centered + (1|cage), data=d, REML=FALSE)
+
+# Take a look
+summary(m1)
+
+# Calculate the R2 for m1
+rsquared(m1)
+
+# QUESTION How much variance do your predictors (fixed effects) explain?
+
+# QUESTION How much variance do your random effects account for?
+
+# QUESTION How much variance does the whole model account for?
+
+# Plot residuals ~ predictors
+plot(resid(m1) ~ temp, data=d)
+plot(resid(m1) ~ sand, data=d)
+
+# Plot residuals ~ predicted values
+plot(resid(m1) ~ predict(m1), data=d)
+
+
+# Plot your model predicted means on a plot of your observations
+# Your means should be lines. To get smooth lines, you'll need to feed predict a continuum
+# of temp values from the min to the max for both ctrl and sand. It's going to be easiest
+# to calculate the ctrl predictions separately from the sand predictions. Do the ctrl 
+# predictions first.
+
+# First plot y ~ temp_centered, coloring points by ctrl vs sand
+plot(y ~ temp_centered, data=d, col=sand_dummy+1)
+
+# Now make a new dataframe with the values of the predictor variables you want predictions 
+# for. You want them for a range of values for temp_centered. See hints for a
+# reminder of how to get a sequence of values. Also remember, you need to give predict 
+# values for all of the predictor variables and also random effect variables. Because you
+# don't care particularly about the predicted mandible length in any one cage. You just
+# want the overall mean, then you can give predict a "new" value (e.g., 19) for cage and
+# tell predict to allow new values. When you do this, predict will predict for the average
+# cage, rather than a specific cage.
+newd.ctrl = data.frame(temp_centered = seq(-10, 10, length=100), sand='ctrl', cage=19)
+
+# Now use predict to get the predictions for the ctrl treatment
+m1.pred.ctrl = predict(m1, newdata=newd.ctrl, allow.new.levels=TRUE)
+
+# Now add the lines to your plot
+lines(m1.pred.ctrl ~ newd.ctrl$temp_centered, col=1)
+
+# Now do the same thing again but for the sand treatment
+newd.sand = data.frame(temp_centered = seq(-10, 10, length=100), sand='sand', cage=19)
+m1.pred.sand = predict(m1, newdata=newd.sand, allow.new.levels=TRUE)
+lines(m1.pred.sand ~ newd.sand$temp_centered, col=2)
+
+# QUESTION How well is our model describing the data? Where is it going wrong?
+
+
+
+
+# Hints:
+# a) Use the rsquared function in the piecewiseSEM
+# b) Use the resid function to extract residuals from a model
+# c) Use the seq function to get a sequence of numbers: seq(from, to, length=length)
+# d) Use the predict function to get the predicted values for each observation
+# e) Leave allow.new.levels=TRUE in the predict function to get predict to predict the
+# expectation for the average cage.
+
+
+
+##########################################################################################
+# 5. Evaluate m1 by plotting model-predicted observations over your real observations
+
+# It's helpful to look at the model predicted means (as above), but that ignores what your
+# model is saying about variability in your system. To evaluate how well your model is
+# capturing and describing the variability in your data (how much and where it happens),
+# you can compare your observed data to model-predicted observations.
+
+# First plot your observed data again
+plot(y ~ temp_centered, data=d, col=as.numeric(sand), ylim=c(-10,20))
+
+# Look at your model again to extract what you need for the simulation
+summary(m1)
+
+# Second simulate model-predicted observations (fake data). See hint for help. Ignore the
+# role of the random effects for this. They can be incorporated, but it's not necessary...
+# Simulate a dataset of the same size as your observed dataset.
+fakey = rnorm(54, 2.864 + 3.593*d$sand_dummy + 0.5086*d$temp_centered, 3.34)
+
+# Add your fake data to your plot of observed data
+points(fakey~temp_centered, data=d, col=as.numeric(sand), pch=20, ylim=c(-10,20))
+
+
+# QUESTION How do the model-predicted points differ from the true points? What does this 
+# tell you about how "good" your model is?
+
+
+# Hints:
+# a) Our model uses a normal distribution to represent stochasticity, so you should too
+# b) You can simulate from the normal using rnorm. Put your model's equation in for the 
+# mean of the normal.
+# c) To include/exclude the effect of sand, you can use the sand dummy variable we made
+# above: sand_dummy. It's just 0 for ctrl and 1 for sand.
+# d) You are going to need to use a std dev parameter for your simulation of fake data.
+# Use the "Residual" "Std.Dev." as your estimate of the std dev of the normal. It's under
+# the "Random effects:". Note that we're ignoring variability associated with the cage
+# random effect. There are ways to incorporate that, but you could justify ignoring it by
+# saying you don't care about it...
+
+
+
+##########################################################################################
+# 6. Fit and evaluate the second model with log(y)
+
+# Same as above but with logy as response
+m2 = lmer(logy ~ sand + temp_centered + (1|cage), data=d, REML=FALSE)
+
+# Take a look
+summary(m2)
+
+# Calculate the R2 for m2
+rsquared(m2)
+
+# QUESTION What does this tell you about your model and how does this differ from m1?
+
+
+# Plot residuals ~ predictors
+plot(resid(m2) ~ temp, data=d)
+plot(resid(m2) ~ sand, data=d)
+
+# Plot residuals ~ predicted values
+plot(resid(m2) ~ predict(m2), data=d)
+
+
+# QUESTION How do these residual figures differ from those for m1? What is this telling 
+# you?
+
+
+# Plot your model predicted means on a plot of your observations
+# Your means should be lines. To get smooth lines, you'll need to feed predict a continuum
+# of temp values from the min to the max for both ctrl and sand. It's going to be easiest
+# to calculate the ctrl predictions separately from the sand predictions. Do the ctrl 
+# predictions first.
+
+# First plot logy ~ temp_centered, coloring points by ctrl vs sand
+plot(logy ~ temp_centered, data=d, col=sand_dummy+1)
+
+# I would say to make a new dataframe with the values of the predictor variables you want 
+# predictions for. But you already did this! You have them in newd.ctrl and newd.sand.
+
+# Use predict and your dataframes of new predictor values to get the predictions for the 
+# ctrl treatment. Remember to use allow.new.levels=TRUE
+m2.pred.ctrl = predict(m2, newdata=newd.ctrl, allow.new.levels=TRUE)
+
+# Now add the lines to your plot
+lines(m2.pred.ctrl ~ newd.ctrl$temp_centered, col=1)
+
+# Now do the same thing again but for the sand treatment, predicting and plotting
+m2.pred.sand = predict(m2, newdata=newd.sand, allow.new.levels=TRUE)
+lines(m2.pred.sand ~ newd.sand$temp_centered, col=2)
+
+# QUESTION How well is m2 doing? How does this differ from m1?
+
+
+# Hints:
+# a) Use the rsquared function in the piecewiseSEM
+# b) Use the resid function to extract residuals from a model
+# c) Use the predict function to get the predicted values for each observation
+# d) Leave allow.new.levels=TRUE in the predict function to get predict to predict the
+# expectation for the average cage.
+
+
+
+##########################################################################################
+# 7. Evaluate m2 by plotting model-predicted observations over your real observations
+
+# Same as section 5 above, but modify for m2. In this section (7), for ease, you can work
+# and plot on the logy scale. If you want to backtransform, see section 8, the bonus.
+
+# First plot your observed data again
+plot(logy ~ temp_centered, data=d, col=as.numeric(sand))
+
+# Look at your model again to extract what you need for the simulation
+summary(m2)
+
+# Second simulate model-predicted observations (fake data). See hint for help. Ignore the
+# role of the random effects for this. They can be incorporated, but it's not necessary...
+# Simulate a dataset of the same size as your observed dataset.
+fakeylog = rnorm(54, 0.83125 + 0.5728*d$sand_dummy + 0.10669*d$temp_centered, 0.4166)
+
+# Add your fake data to your plot of observed data
+points(fakeylog~temp_centered, data=d, col=as.numeric(sand), pch=20, ylim=c(-10,20))
+
+
+# QUESTION How does this compare to m1? Is this a "good" model? Is it capturing the
+# patterns in your data?
+
+
+# Hints:
+# a) Our model uses a normal distribution to represent stochasticity, so you should too
+# b) You can simulate from the normal using rnorm. Put your model's equation in for the 
+# mean of the normal.
+# c) To include/exclude the effect of sand, you can use the sand dummy variable we made
+# above: sand_dummy. It's just 0 for ctrl and 1 for sand.
+# d) You are going to need to use a std dev parameter for your simulation of fake data.
+# Use the "Residual" "Std.Dev." as your estimate of the std dev of the normal. It's under
+# the "Random effects:". Note that we're ignoring variability associated with the cage
+# random effect. There are ways to incorporate that, but you could justify ignoring it by
+# saying you don't care about it...
+
+
+
+##########################################################################################
+# 8. BONUS: Do section 7 again, but back-transform 
+
+# This means you are plotting on the arithmetic scale of mandible length, instead of the
+# log scale of log( length )
+
+
+
+
+
+
+

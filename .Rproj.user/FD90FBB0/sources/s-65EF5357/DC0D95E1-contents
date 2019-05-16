@@ -1,0 +1,303 @@
+setwd("C:\\Users\\chaseoneil\\Dropbox (UFL)\\Apple snail data\\Water Chemistry")
+
+#packages
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(tidyverse)
+library(gridExtra)
+library(RColorBrewer)
+library(grid)
+library(extrafont)
+library(xts)
+library(reshape2)
+library(plotrix)
+library(TTR)
+library(lme4)
+library(cowplot)
+
+#data
+wq<-read.csv("Probereading_all_1st.csv")
+
+#Turning dates into ACTUAL dates
+wq$DATE <-as.Date(wq$DATE,"%m/%d/%Y")
+class(wq$DATE)
+
+#Adding week column for fixed effect model 
+week<-seq(0, 14, by=2)
+DATE<-c("2018/06/21", "2018/07/06","2018/07/20","2018/08/02","2018/08/17","2018/08/31","2018/09/14","2018/09/27")
+df1<-cbind.data.frame(week, DATE)
+df1$DATE<-as.Date(df1$DATE,"%Y/%m/%d")
+wq2<- left_join(wq,df1,by="DATE")
+
+#Changing time from factor to a POsixct()
+#wq$TIME<-as.POSIXct(wq$TIME, format = "%I-%M-%S-%p")
+#class(wq$TIME)
+
+
+#Subset data set into Wetland.types IM and SN
+IM_wq<- wq %>% filter(wetland.type == "IM")
+SN_wq <- wq %>% filter(wetland.type == "SN")
+
+
+#Graphing Dissolved oxygen (percent saturated) separated by wetland.type
+#IM
+ODO_IM<-ggplot(IM_wq, aes(x=DATE, y=ODO_percentsat,group=snail.nosnail,color=snail.nosnail)) +
+  geom_point(position="dodge", stat="summary", 
+             fun.y = "mean",size=4) +
+  geom_errorbar(stat="summary",fun.data = mean_se,
+                col="Gray", width=1, size=0.5) +
+  labs(y="DO %",title="IM") +
+  scale_fill_brewer(palette="RdYlGn") +
+  ylim(0,80) +
+  theme_bw() 
+ODO_IM
+
+#IM:adding a lm line to plot 
+ODO_IM_lm<-ggplot(IM_wq, aes(x=DATE, y=ODO_percentsat,group=snail.nosnail,color=snail.nosnail)) +
+  geom_point(alpha=0.3,position = position_jitter()) +
+  stat_smooth(method = "lm") +
+  labs(y="DO %",title="IM -lm function") +
+  scale_fill_brewer(palette="RdYlGn") +
+  ylim(0,75) +
+  theme_bw() 
+ODO_IM_lm
+
+#SN
+ODO_SN<-ggplot(SN_wq, aes(x=DATE, y=ODO_percentsat,group=snail.nosnail,color=snail.nosnail)) +
+  geom_point(position="dodge", stat="summary", 
+             fun.y = "mean",size=4) +
+  geom_errorbar(stat="summary",fun.data = mean_se,
+                col="Gray", width=1, size=0.5) +
+  labs(y="DO %",title="SN") +
+  scale_fill_brewer(palette="RdYlGn") +
+  ylim(0,80) +
+  theme_bw() 
+ODO_SN
+
+#SN:adding a lm line to plot
+ODO_SN_lm<-ggplot(SN_wq, aes(x=DATE, y=ODO_percentsat,group=snail.nosnail,color=snail.nosnail)) +
+  geom_point(alpha=0.3,position = position_jitter()) +
+  stat_smooth(method = "lm") +
+  labs(y="DO %",title="SN -lm function") +
+  scale_fill_brewer(palette="RdYlGn") +
+  ylim(0,75) +
+  theme_bw() 
+ODO_SN_lm
+
+#Final grid of IM and SN Dissovled Oxygen % with lm graphs
+ODO_plot<-grid.arrange(ODO_IM, ODO_IM_lm, ODO_SN,ODO_SN_lm,nrow=2)
+
+
+
+#ggplot of chla for wetland.types IM and SN
+chla_IM<-ggplot(IM_wq, aes(x=DATE, y=Chlorophyll_microgperL, group=snail.nosnail,color=snail.nosnail)) +
+  geom_point(position="identity", stat="summary", 
+             fun.y = "mean",size=4) +
+  geom_errorbar(stat="summary",fun.data = mean_se,
+                col="Gray", width=1, size=0.5) +
+  labs(y="Chla micro_g/L",title="IM") +
+  scale_fill_brewer(palette="RdYlGn") +
+  ylim(0,75) +
+  theme_bw() +
+  theme(legend.position = "None",
+        axis.title.x = element_blank())
+chla_IM
+
+chla_SN<-ggplot(SN_wq, aes(x=DATE, y=Chlorophyll_microgperL,group=snail.nosnail,color=snail.nosnail)) +
+  geom_point(position="identity", stat="summary", 
+             fun.y = "mean",size=4) +
+  geom_errorbar(stat="summary",fun.data = mean_se,
+                col="Gray", width=1, size=0.5) +
+  labs(y="Chla micro_g/L",title="SN") +
+  scale_fill_brewer(palette="RdYlGn") +
+  ylim(0,75) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+chla_SN
+
+#Final grid arranging Chla for wetland.type
+grid.arrange(chla_IM, chla_SN, nrow=1)
+
+
+
+
+#Re-organize data for ggplot to include means to create line graphs (see ggplots below)
+mean_data <- group_by(wq, snail.nosnail, wetland.type,DATE) %>%
+  summarise(m_ph = mean(pH),sde_ph=std.error(pH),
+            m_orp = mean(ORP_mV),sde_orp=std.error(ORP_mV),
+            m_DO = mean(ODO_milligperL),sde_DO=std.error(ODO_milligperL),
+            m_T = mean(Temp_C),sde_T=std.error(Temp_C),
+            m_cond = mean(Sp.Cond_uSpercm),sde_cond=std.error(Sp.Cond_uSpercm),
+            m_chla = mean(Chlorophyll_microgperL),
+            sde_chla=std.error(Chlorophyll_microgperL))
+
+
+
+
+#Creating plots for variables: pH, ORP, DO, Temperature, Conductivity, and Chlorophyll-A 
+ph<-ggplot(mean_data, aes(x=DATE, y=m_ph, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_ph-sde_ph/2), ymax = (m_ph+sde_ph/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="pH",title="pH") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                     labels=c("No Snail", "Snail")) +
+  theme_bw() + 
+  theme(legend.position="None",
+        axis.title.x=element_blank())
+ph
+
+orp<-ggplot(mean_data, aes(x=DATE, y=m_orp, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_orp-sde_orp/2), ymax = (m_orp+sde_orp/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="ORP mV",title="ORP") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                     labels=c("No Snail", "Snail")) +
+  theme_bw() +
+  theme(legend.position="None",
+        axis.title.x=element_blank())
+orp
+
+DO<-ggplot(mean_data, aes(x=DATE, y=m_DO, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_DO-sde_DO/2), ymax = (m_DO+sde_DO/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="DO mg/L",title="Dissolved Oxygen") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                     labels=c("No Snail", "Snail")) +
+  theme_bw() +
+  theme(legend.position="None",
+        axis.title.x=element_blank())
+DO
+
+Temp<-ggplot(mean_data, aes(x=DATE, y=m_T, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_T-sde_T/2), ymax = (m_T+sde_T/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="Degrees Celsius",title="Temperature") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                     labels=c("No Snail", "Snail")) +
+  theme_bw() +
+  theme(legend.position="None",
+        axis.title.x=element_blank())
+Temp
+
+cond<-ggplot(mean_data, aes(x=DATE, y=m_cond, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_cond-sde_cond/2), ymax = (m_cond+sde_cond/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="micro S/cm ",title="Conductivity") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                     labels=c("No Snail", "Snail")) +
+  theme_bw() +
+  theme(legend.position="None",
+        axis.title.x=element_blank())
+cond
+
+chla_g<-ggplot(mean_data, aes(x=DATE, y=m_chla, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_chla-sde_chla/2), ymax = (m_chla+sde_chla/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="micro g/L ",title="Chlorophyll A") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                    labels=c("No Snail", "Snail")) +
+  theme_bw() +
+  theme(legend.position="None",
+        axis.title.x=element_blank())
+chla_g
+
+leg<-ggplot(mean_data, aes(x=DATE, y=m_chla, color=snail.nosnail,group=snail.nosnail)) +
+  facet_wrap(~wetland.type) +
+  geom_line(size=2) +
+  geom_errorbar(aes(x=DATE, ymin = (m_chla-sde_chla/2), ymax = (m_chla+sde_chla/2)),width = 0.15, size = 1, col="gray") +
+  labs(y="micro g/L ",title="Chlorophyll A") +
+  scale_color_manual(values=c("palegreen4", "tan"), name="Snail Treatment",
+                     labels=c("No Snail", "Snail")) +
+  theme_bw() +
+  theme(legend.title = element_blank(),
+        legend.position = "top")
+leg
+
+leg1<-get_legend(leg)
+
+
+#Plot of all "background" variables - random? or not as important variables
+rando<-grid.arrange(ph,orp,Temp, cond, nrow=4)
+rando1<-grid.arrange(leg1,rando, nrow=2, heights=c(0.03,1))
+
+#Plot of Chla and DO - should be fixed variables or more important
+fix<-grid.arrange(chla_g, DO, nrow=2)
+fix1<-grid.arrange(leg1,fix, nrow=2, heights=c(0.03,1))
+
+#Stats
+#Chlorophylla
+t0<-lm(Chlorophyll_microgperL~DATE+snail.nosnail * wetland.type-1, data=wq2)
+summary(t0)
+
+a1<-aov(Chlorophyll_microgperL~DATE+snail.nosnail * wetland.type, data=wq2)
+summary(a1)
+
+t1<-lmer(Chlorophyll_microgperL~snail.nosnail * wetland.type + (1|DATE) + (1|wetland.id), data=wq2)
+summary(t1)
+
+
+t2<-lmer(Chlorophyll_microgperL~DATE + snail.nosnail * wetland.type + (1|wetland.id), data=wq2)
+summary(t2)
+
+anova(t1,t2)
+
+
+
+
+#t2 - DATE as  fixed effect fits the model slightly better in terms of AIC an dlogLik althought not by much
+
+#Checking assumptions model
+par(mfrow=c(2,2))
+plot(t2, add.smooth = FALSE, which = 1)
+T2<-resid(t2)
+hist(T2, xlab = "Residuals", main = "")
+plot(wq2$snail.nosnail, T2, xlab="snail",ylab="residuals")
+plot(wq2$wetland.type, T2, xlab="wetland.type",ylab="residuals")
+plot(wq2$DATE,T2,xlab="date", ylab="residuals")
+#residual histogram looks odd (two peaks separated) + residuals vs fitted have pattern
+
+
+#gamma distribution
+g1<-glm(Chlorophyll_microgperL~DATE + snail.nosnail * wetland.type, family=Gamma, data=wq2)
+summary(g1)
+
+#Checking assumptions model
+par(mfrow=c(2,2))
+plot(g1, add.smooth = FALSE, which = 1)
+G1<-resid(g1)
+hist(G1, xlab = "Residuals", main = "")
+plot(wq2$snail.nosnail, G1, xlab="snail",ylab="residuals")
+plot(wq2$wetland.type, G1, xlab="wetland.type",ylab="residuals")
+plot(wq2$DATE,G1,xlab="date", ylab="residuals")
+#looks better?
+
+#DO
+u0<-lm(ODO_milligperL~DATE+snail.nosnail * wetland.type, data=wq2)
+summary(u0)
+
+u1<-lmer(ODO_milligperL~snail.nosnail * wetland.type + (1|DATE) + (1|wetland.id), data=wq2)
+summary(u1)
+#model fails with interaction term
+
+u2<-lmer(ODO_milligperL~DATE + snail.nosnail + wetland.type + (1|wetland.id), data=wq2)
+summary(u2)
+
+anova(u1,u2)
+
+#Checking assumptions model
+par(mfrow=c(2,2))
+plot(u2, add.smooth = FALSE, which = 1)
+U2<-resid(t2)
+hist(U2, xlab = "Residuals", main = "")
+plot(wq2$snail.nosnail, U2, xlab="snail",ylab="residuals")
+plot(wq2$wetland.type, U2, xlab="wetland.type",ylab="residuals")
+plot(wq2$DATE,U2,xlab="date", ylab="residuals")
+#residual histogram looks odd (two peaks separated)
