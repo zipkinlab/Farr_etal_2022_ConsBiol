@@ -29,6 +29,8 @@ mu.g0 ~ dnorm(0, 0.1)
 tau.g0 <- 1/(sig.g0 * sig.g0)
 sig.g0 ~ dt(0, pow(2.5,-2), 1) T(0,)
 
+alpha1 ~ dnorm(0, 0.368)
+
 for(s in 1:nspec){
 
 beta0[s] ~ dnorm(mu.b0, tau.b0)
@@ -45,17 +47,17 @@ gamma0[s] ~ dnorm(mu.g0, tau.g0)
 
 for(j in 1:nsites){
 
-logit(r[1,j,s]) <- alpha0[s]
+logit(r[nstart[j],j,s]) <- alpha0[s] + alpha1 * days[nstart[j],j]
 
-N[1,j,s] ~ dpois(lambda[j,s])
-log(lambda[j,s]) <- beta0[s] + beta1[s] * density[j] + beta2[s] * edge[j] +
-                  beta3[s] * density[j] * edge[j] + beta4[s] * elev[j]
+N[nstart[j],j,s] ~ dpois(lambda[j,s])
+log(lambda[j,s]) <- beta0[s] + beta1[s] * density[j] + beta2[s] * edge[nstart[j],j] +
+                  beta3[s] * density[j] * edge[nstart[j],j] + beta4[s] * elev[nstart[j],j]
 
-for(t in 2:nyrs){
+for(t in (nstart[j]+1):nend[j]){
 
-logit(r[t,j,s]) <- alpha0[s]
-logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[j] +
-                         omega3[s] * density[j] * edge[j]
+logit(r[t,j,s]) <- alpha0[s] + alpha1 * days[t,j]
+logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[t,j] +
+                         omega3[s] * density[j] * edge[t,j]
 S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
 G[t-1,j,s] ~ dpois(gamma[t-1,s])
 N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
@@ -63,7 +65,7 @@ N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
 }#end t
 }#end j
 
-for(t in 2:nyrs){
+for(t in 2:9){
 log(gamma[t-1,s]) <- gamma0[s]
 }#end t
 
