@@ -94,7 +94,9 @@ npark <- max(park)
 # }
 
 #Site indices
-
+test <- cbind(as.factor(unique(Data[,c("deployment ID", "park", "Year")])$Year), 
+              as.factor(unique(Data[,c("deployment ID", "park", "Year")])$park), 
+              as.factor(unique(Data[,c("deployment ID", "park", "Year")])$`deployment ID`))
 
 #Covariates
 Cov <- Data %>% group_by(`deployment ID`, Year) %>%
@@ -121,6 +123,8 @@ sumRange <- nimbleFunction(
     return(sum(N, na.rm = TRUE))
     returnType(double())
   })
+
+
 
 MSdyn.c <- nimbleCode({
   
@@ -223,15 +227,16 @@ MSdyn.c <- nimbleCode({
     #for(t in 2:nyrs){ #check 9
     #  log(gamma[t-1,s]) <- gamma0[s]
     #}#end t
-    for(t in 1:nyrs){
-      Ntot[t,s] <- sumRange(N[t,1:nsites,s])
-      Npark[t,1,s] <- sumRange(N[t,1:60,s])
-      Npark[t,2,s] <- sumRange(N[t,61:120,s])
-      Npark[t,3,s] <- sumRange(N[t,121:180,s])
-      Npark[t,4,s] <- sumRange(N[t,181:277,s])
-      Npark[t,5,s] <- sumRange(N[t,278:337,s])
-      Npark[t,6,s] <- sumRange(N[t,338:397,s])
-    }#end t
+    for(i in 1:npark){
+      for(t in 1:nyears[i]){
+        Npark[t,1,s] <- sum(N[t,1:60,s])
+        Npark[t,2,s] <- sum(N[t,61:120,s])
+        Npark[t,3,s] <- sum(N[t,121:180,s])
+        Npark[t,4,s] <- sum(N[t,181:277,s])
+        Npark[t,5,s] <- sum(N[t,278:337,s])
+        Npark[t,6,s] <- sum(N[t,338:397,s])
+      }#end t
+    }#end i
   }#end s
   
   for(k in 1:nobs){
@@ -246,8 +251,9 @@ MSdyn.c <- nimbleCode({
 #--------------#
 
 #Data
-MSdyn.d <- list(y = y, nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
-                yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days)
+MSdyn.data <- list(y = y, park2 = park2)
+MSdyn.con <- list(nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
+                yr = yr, site = site, spec = spec, park = park, park3 = park3, elev = elev, edge = edge, density = density, days = days)
 
 #Initial values
 Nst <- array(NA, dim = c(nyrs, nsites, nspec))
@@ -363,7 +369,7 @@ params <- c("mu.b0", "tau.b0", "mu.o0", "tau.o0",
             "omega0", "gamma0", "tau.p", "Ntot", "Npark")
 
 #MCMC settings
-MSdyn.m <- nimbleModel(MSdyn.c, constants = MSdyn.d, inits = inits())
+MSdyn.m <- nimbleModel(MSdyn.c, constants = MSdyn.con, data = MSdyn.data, inits = inits())
 
 MCMCconf <- configureMCMC(MSdyn.m, monitors = params)
 #MCMCconf$printSamplers(1:122)
