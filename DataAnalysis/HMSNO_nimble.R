@@ -13,7 +13,7 @@ library(dplyr)
 library(tidyr)
 library(reshape2)
 library(nimble)
-library(compareMCMCs)
+#library(compareMCMCs)
 library(coda)
 
 #-----------#
@@ -84,6 +84,18 @@ yr <- as.numeric(as.factor(Data2$Year))
 site <- as.numeric(as.factor(Data2$`deployment ID`))
 spec <- as.numeric(as.factor(Data2$species))
 
+#Park indices
+park <- as.numeric(as.factor(unique(Data[,c("deployment ID", "park")])$park))
+npark <- max(park)
+# park2 <- matrix(NA, ncol = npark, nrow = max(table(park1)))
+# park3 <- as.numeric(table(park1))
+# for(i in 1:npark){
+#   park2[1:park3[i],i] <- which(park1 == i)
+# }
+
+#Site indices
+
+
 #Covariates
 Cov <- Data %>% group_by(`deployment ID`, Year) %>%
   distinct(`deployment ID`, Year, .keep_all = TRUE)
@@ -104,93 +116,122 @@ density <- as.numeric(density$density)
 #-NIMBLE model-#
 #--------------#
 
+sumRange <- nimbleFunction(
+  run = function(N = double(1)) {
+    return(sum(N, na.rm = TRUE))
+    returnType(double())
+  })
+
 MSdyn.c <- nimbleCode({
-    
+  
   mu.b0 ~ dnorm(0, 0.1)
-  #tau.b0 <- 1/(sig.b0 * sig.b0)
-  #sig.b0 ~ dt(0, pow(2.5,-2), 1) T(0,)
+  # #tau.b0 <- 1/(sig.b0 * sig.b0)
+  # #sig.b0 ~ dt(0, pow(2.5,-2), 1) T(0,)
   tau.b0 ~ dgamma(0.1, 0.1)
-  mu.b1 ~ dnorm(0, 0.1)
-  tau.b1 ~ dgamma(0.1, 0.1)
-  mu.b2 ~ dnorm(0, 0.1)
-  tau.b2 ~ dgamma(0.1, 0.1)
-  mu.b3 ~ dnorm(0, 0.1)
-  tau.b3 ~ dgamma(0.1, 0.1)
-  mu.b4 ~ dnorm(0, 0.1)
-  tau.b4 ~ dgamma(0.1, 0.1)
-  #mu.a0 ~ dnorm(0, 0.368) #dunif(0, 1)
-  mu.a0L <- logit(mu.a0)
-  mu.a0 ~ dunif(0, 1)
-  tau.a0 ~ dgamma(0.1, 0.1)
+  # mu.b1 ~ dnorm(0, 0.1)
+  # tau.b1 ~ dgamma(0.1, 0.1)
+  # mu.b2 ~ dnorm(0, 0.1)
+  # tau.b2 ~ dgamma(0.1, 0.1)
+  # mu.b3 ~ dnorm(0, 0.1)
+  # tau.b3 ~ dgamma(0.1, 0.1)
+  # mu.b4 ~ dnorm(0, 0.1)
+  # tau.b4 ~ dgamma(0.1, 0.1)
+  # mu.a0 ~ dnorm(0, 0.368) #dunif(0, 1)
+  # mu.a0L <- logit(mu.a0)
+  # mu.a0 ~ dunif(0, 1)
+  # tau.a0 ~ dgamma(0.1, 0.1)
   #mu.o0 ~ dnorm(0, 0.368) #dunif(0, 1)
   mu.o0L <- logit(mu.o0)
   mu.o0 ~ dunif(0, 1)
   #tau.o0 <- 1/(sig.o0 * sig.o0)
   #sig.o0 ~ dt(0, pow(2.5,-2), 1) T(0,)
   tau.o0 ~ dgamma(0.1, 0.1)
-  #mu.o1 ~ dnorm(0, 0.368)
-  mu.o1 ~ dnorm(0, 0.1)
-  #tau.o1 <- 1/(sig.o1 * sig.o1)
-  #sig.o1 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  tau.o1 ~ dgamma(0.1, 0.1)
-  #mu.o2 ~ dnorm(0, 0.368)
-  mu.o2 ~ dnorm(0, 0.1)
-  #tau.o2 <- 1/(sig.o2 * sig.o2)
-  #sig.o2 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  tau.o2 ~ dgamma(0.1, 0.1)
-  #mu.o3 ~ dnorm(0, 0.368)
-  mu.o3 ~ dnorm(0, 0.1)
-  #tau.o3 <- 1/(sig.o3 * sig.o3)
-  #sig.o3 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  tau.o3 ~ dgamma(0.1, 0.1)
-  mu.g0 ~ dnorm(0, 0.1)
-  #tau.g0 <- 1/(sig.g0 * sig.g0)
-  #sig.g0 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  tau.g0 ~ dgamma(0.1, 0.1)
+  # #mu.o1 ~ dnorm(0, 0.368)
+  # mu.o1 ~ dnorm(0, 0.1)
+  # #tau.o1 <- 1/(sig.o1 * sig.o1)
+  # #sig.o1 ~ dt(0, pow(2.5,-2), 1) T(0,)
+  # tau.o1 ~ dgamma(0.1, 0.1)
+  # #mu.o2 ~ dnorm(0, 0.368)
+  # mu.o2 ~ dnorm(0, 0.1)
+  # #tau.o2 <- 1/(sig.o2 * sig.o2)
+  # #sig.o2 ~ dt(0, pow(2.5,-2), 1) T(0,)
+  # tau.o2 ~ dgamma(0.1, 0.1)
+  # #mu.o3 ~ dnorm(0, 0.368)
+  # mu.o3 ~ dnorm(0, 0.1)
+  # #tau.o3 <- 1/(sig.o3 * sig.o3)
+  # #sig.o3 ~ dt(0, pow(2.5,-2), 1) T(0,)
+  # tau.o3 ~ dgamma(0.1, 0.1)
+  # #mu.g0 ~ dnorm(0, 0.1)
+  # #tau.g0 <- 1/(sig.g0 * sig.g0)
+  # #sig.g0 ~ dt(0, pow(2.5,-2), 1) T(0,)
+  # #tau.g0 ~ dgamma(0.1, 0.1)
+  
+  log(gamma) <- gamma0
+  gamma0 ~ dnorm(0, 0.1)
   
   #alpha1 ~ dnorm(0, 0.368)
+  alpha0 ~ dunif(0, 1)
   alpha1 ~ dnorm(0, 0.1)
+  
+  
+  for(i in 1:npark){
+    eps[i] ~ dnorm(0, tau.p)
+  }
+  
+  tau.p ~ dgamma(0.1, 0.1)
   
   for(s in 1:nspec){
     
     beta0[s] ~ dnorm(mu.b0, tau.b0) 
-    beta1[s] ~ dnorm(mu.b1, tau.b1)
-    beta2[s] ~ dnorm(mu.b2, tau.b2)
-    beta3[s] ~ dnorm(mu.b3, tau.b3)
-    beta4[s] ~ dnorm(mu.b4, tau.b4)
-    alpha0[s] ~ dnorm(mu.a0L, tau.a0)
+    # beta1[s] ~ dnorm(mu.b1, tau.b1)
+    # beta2[s] ~ dnorm(mu.b2, tau.b2)
+    # beta3[s] ~ dnorm(mu.b3, tau.b3)
+    # beta4[s] ~ dnorm(mu.b4, tau.b4)
+    # alpha0[s] ~ dnorm(mu.a0L, tau.a0)
     omega0[s] ~ dnorm(mu.o0L, tau.o0)
-    omega1[s] ~ dnorm(mu.o1, tau.o1)
-    omega2[s] ~ dnorm(mu.o2, tau.o2)
-    omega3[s] ~ dnorm(mu.o3, tau.o3)
-    gamma0[s] ~ dnorm(mu.g0, tau.g0)
+    # omega1[s] ~ dnorm(mu.o1, tau.o1)
+    # omega2[s] ~ dnorm(mu.o2, tau.o2)
+    # omega3[s] ~ dnorm(mu.o3, tau.o3)
+    #gamma0[s] ~ dnorm(mu.g0, tau.g0)
     
     for(j in 1:nsites){
       
-      logit(r[nstart[j],j,s]) <- alpha0[s] + alpha1 * days[nstart[j],j]
+      logit(r[nstart[j],j,s]) <- logit(alpha0) + alpha1 * days[nstart[j],j]
       
       N[nstart[j],j,s] ~ dpois(lambda[j,s])
-      log(lambda[j,s]) <- beta0[s] + beta1[s] * density[j] + beta2[s] * edge[nstart[j],j] +
-        beta3[s] * density[j] * edge[nstart[j],j] + beta4[s] * elev[nstart[j],j]
+      log(lambda[j,s]) <- beta0[s] + eps[park[j]]
+      #+ beta1[s] * density[j] + beta2[s] * edge[nstart[j],j] +
+      #   beta3[s] * density[j] * edge[nstart[j],j] + beta4[s] * elev[nstart[j],j]
       
       for(t in (nstart[j]+1):nend[j]){
         
-        logit(r[t,j,s]) <- alpha0[s] + alpha1 * days[t,j]
+        logit(r[t,j,s]) <- alpha0 + alpha1 * days[t,j]
         
-        logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[t,j] +
-          omega3[s] * density[j] * edge[t,j]
+        # logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[t,j] +
+        #   omega3[s] * density[j] * edge[t,j]
+        
+        logit(omega[t-1,j,s]) <- omega0[s] #+ omega1[s] * density[j] + omega2[s] * edge[t,j] +
+        #omega3[s] * density[j] * edge[t,j]
         
         S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
-        G[t-1,j,s] ~ dpois(gamma[t-1,s])
+        #G[t-1,j,s] ~ dpois(gamma[t-1,s])
+        G[t-1,j,s] ~ dpois(gamma)
         N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
-        
       }#end t
     }#end j
     
-    for(t in 2:nyrs){ #check 9
-      log(gamma[t-1,s]) <- gamma0[s]
+    #for(t in 2:nyrs){ #check 9
+    #  log(gamma[t-1,s]) <- gamma0[s]
+    #}#end t
+    for(t in 1:nyrs){
+      Ntot[t,s] <- sumRange(N[t,1:nsites,s])
+      Npark[t,1,s] <- sumRange(N[t,1:60,s])
+      Npark[t,2,s] <- sumRange(N[t,61:120,s])
+      Npark[t,3,s] <- sumRange(N[t,121:180,s])
+      Npark[t,4,s] <- sumRange(N[t,181:277,s])
+      Npark[t,5,s] <- sumRange(N[t,278:337,s])
+      Npark[t,6,s] <- sumRange(N[t,338:397,s])
     }#end t
-    
   }#end s
   
   for(k in 1:nobs){
@@ -205,8 +246,8 @@ MSdyn.c <- nimbleCode({
 #--------------#
 
 #Data
-MSdyn.d <- list(y = y, nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs,
-                  yr = yr, site = site, spec = spec, elev = elev, edge = edge, density = density, days = days)
+MSdyn.d <- list(y = y, nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
+                yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days)
 
 #Initial values
 Nst <- array(NA, dim = c(nyrs, nsites, nspec))
@@ -218,19 +259,19 @@ for(j in 1:nsites){
   Gst[nstart[j]:(nend[j]-1),j,] <- 2
 }
 
-alpha0.fun <- function(){
-  alpha0 <- NULL
-  alpha0[1] <- runif(1, -1.5, -1)
-  alpha0[2] <- runif(1, -1.5, -1)
-  alpha0[3] <- runif(1, -2, -1.5)
-  alpha0[4] <- runif(1, -2.5, -1.5)
-  alpha0[5] <- runif(1, -1.5, -1)
-  alpha0[6] <- runif(1, -1.5, -1)
-  alpha0[7] <- runif(1, -2, -1.5)
-  alpha0[8] <- runif(1, -4, -2)
-  alpha0[9] <- runif(1, -2, -1.5)
-  return(alpha0)
-}
+# alpha0.fun <- function(){
+#   alpha0 <- NULL
+#   alpha0[1] <- runif(1, -1.5, -1)
+#   alpha0[2] <- runif(1, -1.5, -1)
+#   alpha0[3] <- runif(1, -2, -1.5)
+#   alpha0[4] <- runif(1, -2.5, -1.5)
+#   alpha0[5] <- runif(1, -1.5, -1)
+#   alpha0[6] <- runif(1, -1.5, -1)
+#   alpha0[7] <- runif(1, -2, -1.5)
+#   alpha0[8] <- runif(1, -4, -2)
+#   alpha0[9] <- runif(1, -2, -1.5)
+#   return(alpha0)
+# }
 
 beta0.fun <- function(){
   beta0 <- NULL
@@ -288,95 +329,113 @@ gamma0.fun <- function(){
   return(gamma0)
 }
 
+# inits <- function()list(N=Nst, S=Sst, G=Gst,
+#                         mu.a0 = runif(1, 0.1, 0.25), tau.a0 = runif(1, 0, 5), alpha0 = alpha0.fun(), alpha1 = runif(1, -0.25, 0),
+#                         mu.b0 = runif(1, 0, 3), tau.b0 = runif(1, 0, 1), beta0 = beta0.fun(),
+#                         mu.b1 = runif(1, -1, 1), tau.b1 = runif(1, 0, 10), beta1 = runif(nspec, -1, 1),
+#                         mu.b2 = runif(1, -1, 1), tau.b2 = runif(1, 0, 10), beta2 = runif(nspec, -0.5, 0.5),
+#                         mu.b3 = runif(1, -1, 1), tau.b3 = runif(1, 0, 10), beta3 = runif(nspec, -1, 1),
+#                         mu.b4 = runif(1, 0, 2), tau.b4 = runif(1, 0, 2), beta4 = beta4.fun(),
+#                         mu.o0 = runif(1, 0.5, 0.9), tau.o0 = runif(1, 0, 1), omega0 = omega0.fun(),
+#                         mu.o1 = runif(1, 0, 4), tau.o1 = runif(1, 0, 1), omega1 = runif(nspec, -5, 5),
+#                         mu.o2 = runif(1, -1, 1), tau.o2 = runif(1, 0, 10), omega2 = runif(nspec, -1, 1),
+#                         mu.o3 = runif(1, -1, 1), tau.o3 = runif(1, 0, 10), omega3 = runif(nspec, -1, 1),
+#                         mu.g0 = runif(1, -2, 0), tau.g0 = runif(1, 0, 1), gamma0 = gamma0.fun()
+#                         )
+
 inits <- function()list(N=Nst, S=Sst, G=Gst,
-                        mu.a0 = runif(1, 0.1, 0.25), tau.a0 = runif(1, 0, 5), alpha0 = alpha0.fun(), alpha1 = runif(1, -0.25, 0),
+                        alpha0 = runif(1, 0.15, 0.25), alpha1 = runif(1, -0.25, 0),
                         mu.b0 = runif(1, 0, 3), tau.b0 = runif(1, 0, 1), beta0 = beta0.fun(),
-                        mu.b1 = runif(1, -1, 1), tau.b1 = runif(1, 0, 10), beta1 = runif(nspec, -1, 1),
-                        mu.b2 = runif(1, -1, 1), tau.b2 = runif(1, 0, 10), beta2 = runif(nspec, -0.5, 0.5),
-                        mu.b3 = runif(1, -1, 1), tau.b3 = runif(1, 0, 10), beta3 = runif(nspec, -1, 1),
-                        mu.b4 = runif(1, 0, 2), tau.b4 = runif(1, 0, 2), beta4 = beta4.fun(),
                         mu.o0 = runif(1, 0.5, 0.9), tau.o0 = runif(1, 0, 1), omega0 = omega0.fun(),
-                        mu.o1 = runif(1, 0, 4), tau.o1 = runif(1, 0, 1), omega1 = runif(nspec, -5, 5),
-                        mu.o2 = runif(1, -1, 1), tau.o2 = runif(1, 0, 10), omega2 = runif(nspec, -1, 1),
-                        mu.o3 = runif(1, -1, 1), tau.o3 = runif(1, 0, 10), omega3 = runif(nspec, -1, 1),
-                        mu.g0 = runif(1, -2, 0), tau.g0 = runif(1, 0, 1), gamma0 = gamma0.fun()
-                        )
+                        gamma0 = runif(1, -2, 0), tau.p = runif(1, 0, 1)
+)
 
 #Parameters to save
-params <- c("mu.a0", "tau.a0", 
-            "mu.b0", "tau.b0", "mu.b1", "tau.b1", "mu.b2", "tau.b2", "mu.b3", "tau.b3", "mu.b4", "tau.b4",
-            "mu.o0", "tau.o0", "mu.o1", "tau.o1", "mu.o2", "tau.o2", "mu.o3", "tau.o3",
-            "mu.g0", "tau.g0",
-            "alpha0", "alpha1", "beta0", "beta1", "beta2", "beta3", "beta4",
-            "omega0", "omega1", "omega2", "omega3", "gamma0")
+# params <- c("mu.a0", "tau.a0", 
+#             "mu.b0", "tau.b0", "mu.b1", "tau.b1", "mu.b2", "tau.b2", "mu.b3", "tau.b3", "mu.b4", "tau.b4",
+#             "mu.o0", "tau.o0", "mu.o1", "tau.o1", "mu.o2", "tau.o2", "mu.o3", "tau.o3",
+#             "mu.g0", "tau.g0",
+#             "alpha0", "alpha1", "beta0", "beta1", "beta2", "beta3", "beta4",
+#             "omega0", "omega1", "omega2", "omega3", "gamma0")
+
+params <- c("mu.b0", "tau.b0", "mu.o0", "tau.o0",
+            "alpha0", "alpha1", "beta0",
+            "omega0", "gamma0", "tau.p", "Ntot", "Npark")
 
 #MCMC settings
 MSdyn.m <- nimbleModel(MSdyn.c, constants = MSdyn.d, inits = inits())
 
-MCMCconf <- configureMCMC(MSdyn.m)
+MCMCconf <- configureMCMC(MSdyn.m, monitors = params)
 #MCMCconf$printSamplers(1:122)
 
-MCMCconf$removeSampler(c('alpha0', 'alpha1', 'gamma0',
-                         'beta0', 'beta1', 'beta2', 'beta3', 'beta4',
-                         'omega0', 'omega1', 'omega2', 'omega3'))
+# MCMCconf$removeSampler(c('alpha0', 'alpha1', 'gamma0',
+#                          'beta0', 'beta1', 'beta2', 'beta3', 'beta4',
+#                          'omega0', 'omega1', 'omega2', 'omega3'))
+# 
+# MCMCconf$addSampler(target = c('mu.a0', 'alpha0', 'alpha1'),
+#                     type = "AF_slice")
+# 
+# MCMCconf$addSampler(target = c('mu.b0', 'beta0'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.b1', 'beta1'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.b2', 'beta2'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.b3', 'beta3'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.b4', 'beta4'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.o0', 'omega0'),
+#                     type = "AF_slice")
+# 
+# MCMCconf$addSampler(target = c('mu.o1', 'omega1'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.o2', 'omega2'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.o3', 'omega3'),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c('mu.g0', 'gamma0'),
+#                     type = "RW_block")
+# 
+# nFun <- function(node, i){
+#   paste(node, "[", i, "]", sep = "")
+# }
+# 
+# for(i in 1:nspec){
+#   MCMCconf$addSampler(target = c(nFun("beta0", i), nFun("beta1", i), 
+#                                  nFun("beta2", i), nFun("beta3", i),
+#                                  nFun("beta4", i)),
+#                       type = "RW_block")
+#   
+#   MCMCconf$addSampler(target = c(nFun("omega0", i), nFun("omega1", i), 
+#                                  nFun("omega2", i), nFun("omega3", i)),
+#                       type = "AF_slice")  
+# }
+# 
+# MCMCconf$samplerExecutionOrder <- c(seq(1,22,1), seq(52, 41641, 1), seq(23, 51, 1))
 
-MCMCconf$addSampler(target = c('mu.a0', 'alpha0', 'alpha1'),
-                    type = "AF_slice")
+MCMCconf$addSampler(target = c('alpha0', 'alpha1'), type = "AF_slice")
 
-MCMCconf$addSampler(target = c('mu.b0', 'beta0'),
-                    type = "RW_block")
+MCMCconf$addSampler(target = c('mu.b0', 'beta0'), type = "RW_block")
 
-MCMCconf$addSampler(target = c('mu.b1', 'beta1'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.b2', 'beta2'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.b3', 'beta3'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.b4', 'beta4'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.o0', 'omega0'),
-                    type = "AF_slice")
-
-MCMCconf$addSampler(target = c('mu.o1', 'omega1'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.o2', 'omega2'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.o3', 'omega3'),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c('mu.g0', 'gamma0'),
-                    type = "RW_block")
-
-nFun <- function(node, i){
-  paste(node, "[", i, "]", sep = "")
-}
-
-for(i in 1:nspec){
-  MCMCconf$addSampler(target = c(nFun("beta0", i), nFun("beta1", i), 
-                                 nFun("beta2", i), nFun("beta3", i),
-                                 nFun("beta4", i)),
-                      type = "RW_block")
-  
-  MCMCconf$addSampler(target = c(nFun("omega0", i), nFun("omega1", i), 
-                                 nFun("omega2", i), nFun("omega3", i)),
-                      type = "AF_slice")  
-}
-
-MCMCconf$samplerExecutionOrder <- c(seq(1,22,1), seq(52, 41641, 1), seq(23, 51, 1))
+MCMCconf$addSampler(target = c('mu.o0', 'omega0'), type = "AF_slice")
 
 MCMC <- buildMCMC(MCMCconf)
 
 MSdyn.comp <- compileNimble(MSdyn.m, MCMC)
 
-ni <- 25000
+ni <- 100000
 nb <- 20000
-nc <- 3
+nc <- 1
+nt <- 40
 
 #Run NIMBLE model
-MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc)
+MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)
