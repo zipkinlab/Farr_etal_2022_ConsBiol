@@ -51,6 +51,8 @@ CovData <- bind_rows(CovData, read_excel("./EditedData/Data_Nyungwe_nig_sylv_Apr
 
 Data <- full_join(Data, CovData, by = c("deployment ID", "Year")) %>% drop_na()
 
+rm(Temp, CovData)
+
 #-------------#
 #-Format Data-#
 #-------------#
@@ -61,6 +63,9 @@ Data[,5:10] <- apply(Data[,5:10], 2, function(y) as.numeric(gsub("-", NA, y)))
 #Remove cameras that were sampled in only 1 year
 Data <- Data %>% group_by(`deployment ID`) %>% filter(n() > 2) %>% ungroup()
 
+#Arrange dataframe
+Data <- Data %>% arrange(park, Year, `deployment ID`)
+
 #Convert to single vector format
 Data2 <- melt(Data, id = c("park", "deployment ID", "Year", "species", "days", "elevation", "edge"))
 
@@ -68,35 +73,53 @@ Data2 <- melt(Data, id = c("park", "deployment ID", "Year", "species", "days", "
 y <- Data2$value
 
 #Indices
-nyrs <- Data %>% group_by(`deployment ID`) %>% summarize(min(Year), max(Year))
-nstart <- as.numeric(nyrs$`min(Year)`) - as.numeric(min(nyrs$`min(Year)`)) + 1
-nend <- 1 + as.numeric(max(nyrs$`max(Year)`)) - as.numeric(min(nyrs$`min(Year)`)) - 
-  (as.numeric(max(nyrs$`max(Year)`)) - as.numeric(nyrs$`max(Year)`))
+df <- Data %>% group_by(`deployment ID`, park) %>% summarize(minYear = min(Year), maxYear = max(Year))
+df$parkID <- df %>% select(park) %>% .$park %>% as.numeric(.)
+df$siteID <- df %>% select(`deployment ID`) %>% .$`deployment ID` %>% as.factor(.) %>% as.numeric(.)
+df$nstart <- as.numeric(df$minYear) - as.numeric(min(df$minYear)) + 1
+df$nend <- 1 + as.numeric(max(df$maxYear)) - as.numeric(min(df$minYear)) - 
+  (as.numeric(max(df$maxYear)) - as.numeric(df$maxYear))
 
-nyrs <- as.numeric(max(nyrs$`max(Year)`)) - as.numeric(min(nyrs$`min(Year)`)) + 1
-
+nyrs <- as.numeric(max(df$maxYear)) - as.numeric(min(df$minYear)) + 1
 nsites <- as.numeric(Data %>% summarize(n_distinct(`deployment ID`)))
 nspec <- as.numeric(Data %>% summarize (n_distinct(species)))
 nobs <- length(y)
+npark <- max(as.numeric(df$park))
+nstart <- df$nstart
+nend <- df$nend
+
+parkdf <- Data %>% mutate(siteID = as.numeric(as.factor(`deployment ID`))) %>% group_by(park) %>% 
+  summarize(minYear = min(Year), maxYear = max(Year), 
+            minSite = min(siteID),
+            maxSite = max(siteID))
+parkdf$nstart <- as.numeric(parkdf$minYear) - as.numeric(min(parkdf$minYear)) + 1
+parkdf$nend <- 1 + as.numeric(max(parkdf$maxYear)) - as.numeric(min(parkdf$minYear)) - 
+  (as.numeric(max(parkdf$maxYear)) - as.numeric(parkdf$maxYear))
+nyrstr <- parkdf$nstart
+nyrend <- parkdf$nend
+nsitestr <- parkdf$minSite
+nsiteend <- parkdf$maxSite
 
 #Nested indices
+Data2 <- Data2 %>% left_join(., df %>% select(`deployment ID`, park, parkID, siteID), by = c("deployment ID", "park"))
+
 yr <- as.numeric(as.factor(Data2$Year))
-site <- as.numeric(as.factor(Data2$`deployment ID`))
+site <- Data2$siteID
 spec <- as.numeric(as.factor(Data2$species))
+park <- as.numeric(df$park)
 
-#Park indices
-park <- as.numeric(as.factor(unique(Data[,c("deployment ID", "park")])$park))
-npark <- max(park)
-# park2 <- matrix(NA, ncol = npark, nrow = max(table(park1)))
-# park3 <- as.numeric(table(park1))
+# 
+# #Site indices
+# site1 <- cbind(as.factor(unique(Data[,c("deployment ID", "park", "Year")])$Year), 
+#               as.factor(unique(Data[,c("deployment ID", "park", "Year")])$park), 
+#               as.factor(unique(Data[,c("deployment ID", "park", "Year")])$`deployment ID`))
+# site2 <- list()
 # for(i in 1:npark){
-#   park2[1:park3[i],i] <- which(park1 == i)
+#   for(t in 1:nyrs){
+#     print(c(i,t))
+#     print(site1[which(site1[,1]==t&site1[,2]==i),3])
+#   }
 # }
-
-#Site indices
-test <- cbind(as.factor(unique(Data[,c("deployment ID", "park", "Year")])$Year), 
-              as.factor(unique(Data[,c("deployment ID", "park", "Year")])$park), 
-              as.factor(unique(Data[,c("deployment ID", "park", "Year")])$`deployment ID`))
 
 #Covariates
 Cov <- Data %>% group_by(`deployment ID`, Year) %>%
@@ -117,14 +140,6 @@ density <- as.numeric(density$density)
 #--------------#
 #-NIMBLE model-#
 #--------------#
-
-sumRange <- nimbleFunction(
-  run = function(N = double(1)) {
-    return(sum(N, na.rm = TRUE))
-    returnType(double())
-  })
-
-
 
 MSdyn.c <- nimbleCode({
   
@@ -228,13 +243,8 @@ MSdyn.c <- nimbleCode({
     #  log(gamma[t-1,s]) <- gamma0[s]
     #}#end t
     for(i in 1:npark){
-      for(t in 1:nyears[i]){
-        Npark[t,1,s] <- sum(N[t,1:60,s])
-        Npark[t,2,s] <- sum(N[t,61:120,s])
-        Npark[t,3,s] <- sum(N[t,121:180,s])
-        Npark[t,4,s] <- sum(N[t,181:277,s])
-        Npark[t,5,s] <- sum(N[t,278:337,s])
-        Npark[t,6,s] <- sum(N[t,338:397,s])
+      for(t in nyrstr[i]:nyrend[i]){
+        Npark[t,i,s] <- sum(N[t,nsitestr[i]:nsiteend[i],s])
       }#end t
     }#end i
   }#end s
@@ -251,9 +261,10 @@ MSdyn.c <- nimbleCode({
 #--------------#
 
 #Data
-MSdyn.data <- list(y = y, park2 = park2)
+MSdyn.data <- list(y = y)
 MSdyn.con <- list(nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
-                yr = yr, site = site, spec = spec, park = park, park3 = park3, elev = elev, edge = edge, density = density, days = days)
+                yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days,
+                nyrstr = nyrstr, nyrend = nyrend, nsitestr = nsitestr, nsiteend = nsiteend)
 
 #Initial values
 Nst <- array(NA, dim = c(nyrs, nsites, nspec))
@@ -293,19 +304,19 @@ beta0.fun <- function(){
   return(beta0)
 }
 
-beta4.fun <- function(){
-  beta4 <- NULL
-  beta4[1] <- runif(1, 0, 1)
-  beta4[2] <- runif(1, 0, 2)
-  beta4[3] <- runif(1, -1, 0)
-  beta4[4] <- runif(1, 0, 4)
-  beta4[5] <- runif(1, 2, 3)
-  beta4[6] <- runif(1, 1, 1.5)
-  beta4[7] <- runif(1, 0, 2)
-  beta4[8] <- runif(1, 1, 2)
-  beta4[9] <- runif(1, 0.4, 0.6)
-  return(beta4)
-}
+# beta4.fun <- function(){
+#   beta4 <- NULL
+#   beta4[1] <- runif(1, 0, 1)
+#   beta4[2] <- runif(1, 0, 2)
+#   beta4[3] <- runif(1, -1, 0)
+#   beta4[4] <- runif(1, 0, 4)
+#   beta4[5] <- runif(1, 2, 3)
+#   beta4[6] <- runif(1, 1, 1.5)
+#   beta4[7] <- runif(1, 0, 2)
+#   beta4[8] <- runif(1, 1, 2)
+#   beta4[9] <- runif(1, 0.4, 0.6)
+#   return(beta4)
+# }
 
 omega0.fun <- function(){
   omega0 <- NULL
@@ -321,19 +332,19 @@ omega0.fun <- function(){
   return(omega0)
 }
 
-gamma0.fun <- function(){
-  gamma0 <- NULL
-  gamma0[1] <- runif(1, 0, 1)
-  gamma0[2] <- runif(1, -0.2, 0.2)
-  gamma0[3] <- runif(1, -1.5, -0.5)
-  gamma0[4] <- runif(1, -2.5, -1.5)
-  gamma0[5] <- runif(1, -0.6, -0.2)
-  gamma0[6] <- runif(1, -3, -2)
-  gamma0[7] <- runif(1, -1.5, -0.5)
-  gamma0[8] <- runif(1, -3, -1)
-  gamma0[9] <- runif(1, -3, -2)
-  return(gamma0)
-}
+# gamma0.fun <- function(){
+#   gamma0 <- NULL
+#   gamma0[1] <- runif(1, 0, 1)
+#   gamma0[2] <- runif(1, -0.2, 0.2)
+#   gamma0[3] <- runif(1, -1.5, -0.5)
+#   gamma0[4] <- runif(1, -2.5, -1.5)
+#   gamma0[5] <- runif(1, -0.6, -0.2)
+#   gamma0[6] <- runif(1, -3, -2)
+#   gamma0[7] <- runif(1, -1.5, -0.5)
+#   gamma0[8] <- runif(1, -3, -1)
+#   gamma0[9] <- runif(1, -3, -2)
+#   return(gamma0)
+# }
 
 # inits <- function()list(N=Nst, S=Sst, G=Gst,
 #                         mu.a0 = runif(1, 0.1, 0.25), tau.a0 = runif(1, 0, 5), alpha0 = alpha0.fun(), alpha1 = runif(1, -0.25, 0),
@@ -366,7 +377,7 @@ inits <- function()list(N=Nst, S=Sst, G=Gst,
 
 params <- c("mu.b0", "tau.b0", "mu.o0", "tau.o0",
             "alpha0", "alpha1", "beta0",
-            "omega0", "gamma0", "tau.p", "Ntot", "Npark")
+            "omega0", "gamma0", "tau.p", "Npark")
 
 #MCMC settings
 MSdyn.m <- nimbleModel(MSdyn.c, constants = MSdyn.con, data = MSdyn.data, inits = inits())
