@@ -146,7 +146,8 @@ MSdyn.c <- nimbleCode({
   mu.b0 ~ dnorm(0, 0.1)
   # #tau.b0 <- 1/(sig.b0 * sig.b0)
   # #sig.b0 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  tau.b0 ~ dgamma(0.1, 0.1)
+  sig.b0 ~ dunif(0, 3)
+  # tau.b0 ~ dgamma(0.1, 0.1)
   # mu.b1 ~ dnorm(0, 0.1)
   # tau.b1 ~ dgamma(0.1, 0.1)
   # mu.b2 ~ dnorm(0, 0.1)
@@ -201,7 +202,7 @@ MSdyn.c <- nimbleCode({
   
   for(s in 1:nspec){
     
-    beta0[s] ~ dnorm(mu.b0, tau.b0) 
+    beta0[s] ~ dnorm(mu.b0, sd = sig.b0) 
     # beta1[s] ~ dnorm(mu.b1, tau.b1)
     # beta2[s] ~ dnorm(mu.b2, tau.b2)
     # beta3[s] ~ dnorm(mu.b3, tau.b3)
@@ -263,8 +264,8 @@ MSdyn.c <- nimbleCode({
 #Data
 MSdyn.data <- list(y = y)
 MSdyn.con <- list(nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
-                yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days,
-                nyrstr = nyrstr, nyrend = nyrend, nsitestr = nsitestr, nsiteend = nsiteend)
+                  yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days,
+                  nyrstr = nyrstr, nyrend = nyrend, nsitestr = nsitestr, nsiteend = nsiteend)
 
 #Initial values
 Nst <- array(NA, dim = c(nyrs, nsites, nspec))
@@ -292,15 +293,15 @@ for(j in 1:nsites){
 
 beta0.fun <- function(){
   beta0 <- NULL
-  beta0[1] <- runif(1, 1, 4)
-  beta0[2] <- runif(1, 1, 4)
-  beta0[3] <- runif(1, 0, 1)
-  beta0[4] <- runif(1, -2.5, 0)
-  beta0[5] <- runif(1, 4, 5)
-  beta0[6] <- runif(1, -0.5, 0)
-  beta0[7] <- runif(1, 1, 3)
-  beta0[8] <- runif(1, 0, 3)
-  beta0[9] <- runif(1, 0.5, 1)
+  beta0[1] <- runif(1, 1.5, 2.5)
+  beta0[2] <- runif(1, 0.5, 1.25)
+  beta0[3] <- runif(1, 0, 0.75)
+  beta0[4] <- runif(1, -5, -3)
+  beta0[5] <- runif(1, 1.5, 2.25)
+  beta0[6] <- runif(1, -0.25, 0.5)
+  beta0[7] <- runif(1, 0.75, 1.5)
+  beta0[8] <- runif(1, -0.75, 0)
+  beta0[9] <- runif(1, -0.25, 0.5)
   return(beta0)
 }
 
@@ -320,15 +321,15 @@ beta0.fun <- function(){
 
 omega0.fun <- function(){
   omega0 <- NULL
-  omega0[1] <- runif(1, 0, 1)
-  omega0[2] <- runif(1, -1, 0)
-  omega0[3] <- runif(1, 0, 2)
-  omega0[4] <- runif(1, 0, 2)
-  omega0[5] <- runif(1, 1, 1.5)
-  omega0[6] <- runif(1, 2, 4)
-  omega0[7] <- runif(1, 0, 1)
-  omega0[8] <- runif(1, 0, 3)
-  omega0[9] <- runif(1, 2, 3)
+  omega0[1] <- runif(1, 0.2, 0.4)
+  omega0[2] <- runif(1, 0, 0.25)
+  omega0[3] <- runif(1, 1, 1.5)
+  omega0[4] <- runif(1, -1.5, -0.5)
+  omega0[5] <- runif(1, 0.4, 0.6)
+  omega0[6] <- runif(1, 1.9, 2.2)
+  omega0[7] <- runif(1, -0.25, 0)
+  omega0[8] <- runif(1, -0.5, 0)
+  omega0[9] <- runif(1, 2, 2.25)
   return(omega0)
 }
 
@@ -361,10 +362,10 @@ omega0.fun <- function(){
 #                         )
 
 inits <- function()list(N=Nst, S=Sst, G=Gst,
-                        alpha0 = runif(1, 0.15, 0.25), alpha1 = runif(1, -0.25, 0),
-                        mu.b0 = runif(1, 0, 3), tau.b0 = runif(1, 0, 1), beta0 = beta0.fun(),
-                        mu.o0 = runif(1, 0.5, 0.9), tau.o0 = runif(1, 0, 1), omega0 = omega0.fun(),
-                        gamma0 = runif(1, -2, 0), tau.p = runif(1, 0, 1)
+                        alpha0 = runif(1, 0.15, 0.2), alpha1 = runif(1, -0.5, -0.45),
+                        mu.b0 = runif(1, -0.3, 0.75), sig.b0 = runif(1, 1, 2), beta0 = beta0.fun(),
+                        mu.o0 = runif(1, 0.5, 0.75), tau.o0 = runif(1, 0.5, 1.25), omega0 = omega0.fun(),
+                        gamma0 = runif(1, -2, -1.75), tau.p = runif(1, 0.5, 2)
 )
 
 #Parameters to save
@@ -375,7 +376,7 @@ inits <- function()list(N=Nst, S=Sst, G=Gst,
 #             "alpha0", "alpha1", "beta0", "beta1", "beta2", "beta3", "beta4",
 #             "omega0", "omega1", "omega2", "omega3", "gamma0")
 
-params <- c("mu.b0", "tau.b0", "mu.o0", "tau.o0",
+params <- c("mu.b0", "sig.b0", "mu.o0", "tau.o0",
             "alpha0", "alpha1", "beta0",
             "omega0", "gamma0", "tau.p", "Npark")
 
@@ -441,18 +442,67 @@ MCMCconf <- configureMCMC(MSdyn.m, monitors = params)
 
 MCMCconf$addSampler(target = c('alpha0', 'alpha1'), type = "AF_slice")
 
-MCMCconf$addSampler(target = c('mu.b0', 'beta0'), type = "RW_block")
+species <- seq(1, nspec, 1)
 
-MCMCconf$addSampler(target = c('mu.o0', 'omega0'), type = "AF_slice")
+nFun <- function(node, i){
+  paste(node, "[", i, "]", sep = "")
+}
+
+omit <- NULL
+
+MCMCconf$addSampler(target = c("beta0[1]", "beta0[2]", "beta0[3]", "beta0[4]", "beta0[5]",
+                               "beta0[6]", "beta0[7]", "beta0[8]", "beta0[9]"),
+                    type = "RW_block")
+
+MCMCconf$addSampler(target = c("omega0[1]", "omega0[2]", "omega0[3]", "omega0[4]", "omega0[5]",
+                               "omega0[6]", "omega0[7]", "omega0[8]", "omega0[9]"),
+                    type = "RW_block")
+
+for(i in 1:nspec){
+  omit <- c(omit, i)
+  if(i != nspec){
+    for(j in species[-omit]){
+      MCMCconf$addSampler(target = c(nFun("beta0", i), nFun("beta0", j)),
+                          type = "RW_block") 
+      MCMCconf$addSampler(target = c(nFun("omega0", i), nFun("omega0", j)),
+                          type = "RW_block")
+    } 
+  }
+  MCMCconf$addSampler(target = c("mu.b0", nFun("beta0", i)),
+                      type = "RW_block") 
+  MCMCconf$addSampler(target = c("mu.o0", nFun("omega0", i)),
+                      type = "AF_slice")  
+}
+
+
+#MCMCconf$addSampler(target = c('mu.b0', 'beta0'), type = "RW_block")
+
+#MCMCconf$addSampler(target = c('mu.o0', 'omega0'), type = "AF_slice")
 
 MCMC <- buildMCMC(MCMCconf)
 
 MSdyn.comp <- compileNimble(MSdyn.m, MCMC)
 
-ni <- 100000
-nb <- 20000
+ni <- 200000
+nb <- 100000
 nc <- 1
-nt <- 40
+nt <- 50
 
 #Run NIMBLE model
 MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)
+
+#-Save output-#
+ID <- gsub(" ","_",Sys.time())
+ID <- gsub(":", "-", ID)
+save(MSdyn.o, file = paste("output", ID, ".Rdata", sep=""))
+
+#traceplot(out[c(1:3)][,"Npark[1, 1, 1]"])
+#plot(unlist(output[c(1:5)][,"beta0[1]"]), unlist(output[c(1:5)][,"beta0[4]"])
+
+# for(i in 1:npark){
+#   plot(nyrstr[i], mean(unlist(output[c(1:5)][,paste("Npark[", nyrstr[i], ", ", i, ", 8]", sep = "")])), 
+#        xlim = c(1,9), ylim = c(0,500), xlab = "Abundance", ylab = "Year")
+#   for(t in (nyrstr[i] + 1):nyrend[i]){
+#     points(t, mean(unlist(output[c(1:5)][,paste("Npark[", t, ", ", i, ", 8]", sep = "")])))
+#   }
+# }
