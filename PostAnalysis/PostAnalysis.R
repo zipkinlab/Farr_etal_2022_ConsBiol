@@ -3,21 +3,72 @@
 library(coda)
 library(ggplot2)
 library(ggthemes)
+library(dplyr)
 
 #-Load data-#
 
-load(file  = "~/HMSNO/DataAnalysis/MSoutput.Rdata")
+load(file  = "~/HMSNO/DataAnalysis/HMSNO_out.Rdata")
 
 
 #-Summary-#
 
 names <- factor(c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
-          "Ogilby's", "Black-fronted", "Abbott's", "Yellow-backed", "Community"),
+                  "Black-fronted", "Ogilby's",  "Abbott's", "Yellow-backed", "Community"),
           levels =  c("Abbott's", "Bay", "Black-fronted", "Blue",
           "Harvey's", "Ogilby's", "Peters's","White-bellied", 
           "Yellow-backed", "Community"))
 
-out <- summary(output)
+out <- summary(output[c(1:4)][,487:512])
+
+ni <- 8000 #derive this
+
+N <- array(NA, dim = c(nspec,npark,nyrs,ni))
+
+for(s in 1:nspec){
+  for(i in 1:npark){
+    for(t in nyrstr[i]:nyrend[i]){
+      N[s,i,t,] <- unlist(output[c(1:4)][,paste("Npark[", t, ", ", i, ", ", s, "]", sep = "")])
+    }
+  }
+}
+
+
+meanN <- apply(N, MARGIN = c(1,2,3), mean, na.rm = TRUE)
+N97.5 <- apply(N, MARGIN = c(1,2,3), quantile, probs = 0.975, na.rm = TRUE)
+N2.5 <- apply(N, MARGIN = c(1,2,3), quantile, probs = 0.025, na.rm = TRUE)
+
+data <- reshape2::melt(meanN, varnames = c("species", "park", "year"), value.name = "abundance")
+data$species <- factor(data$species,
+                       labels = c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
+                                      "Black-fronted", "Ogilby's",  "Abbott's", "Yellow-backed"))
+data$park <- as.factor(data$park)
+
+high <- reshape2::melt(N97.5, varnames = c("species", "park", "year"), value.name = "97.5%")$`97.5%`
+low <- reshape2::melt(N2.5, varnames = c("species", "park", "year"), value.name = "2.5%")$`2.5%`
+data$`97.5%` <- high
+data$`2.5%` <- low
+
+data %>% 
+  filter(park != "4" & park != "6") %>%
+  ggplot(., aes(x = year, y = abundance)) +
+  geom_line(aes(col = park)) + 
+  geom_ribbon(aes(x = year, ymin = `2.5%`, ymax = `97.5%`, fill = park), alpha = 0.5) +
+  facet_wrap(. ~ species) +
+  theme_few()
+
+data %>% 
+  #filter(park != "4" & park != "6") %>%
+  ggplot(., aes(x = year, y = abundance)) +
+  geom_line(aes(col = species)) + 
+  geom_ribbon(aes(x = year, ymin = `2.5%`, ymax = `97.5%`, fill = species), alpha = 0.5) +
+  facet_wrap(. ~ park) +
+  theme_few() +
+  theme(panel.background = element_rect(fill = "transparent", color = NA),
+        axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
+        legend.position = "none") +
+  labs(y ="Detection probability", x = expression())
+
+
 
 alpha0 <- data.frame(species = names, mean = c(plogis(out$statistics[1:9,"Mean"]), out$statistics[13,"Mean"]),
                      l2.5 = c(plogis(out$quantiles[1:9,"2.5%"]), out$quantiles[13,"2.5%"]),
@@ -56,9 +107,55 @@ FigO0 <- ggplot(omega0) +
                 width = 0, size = 3) +
   coord_cartesian(ylim = c(0.3, 1)) +
   geom_hline(yintercept = 0, alpha = 0.75) +
-  vline
   theme_few() +
   theme(panel.background = element_rect(fill = "transparent", color = NA),
         axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
         legend.position = "none") +
   labs(y ="Apparent survival probability", x = expression())
+
+#-Single-species-#
+
+species <- c("callipygus", "dorsalis", "harveyi", "leucogaster", "monticola", "nigrifrons")
+names <- c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue", "Black-fronted")
+
+alpha0 <- beta0 <- beta1 <- beta2 <- beta3 <- 
+  beta4 <- gamma0 <- omega0 <- omega1 <- omega2 <- omega3 <- rep(NA, 6)
+
+for(i in 1:length(species)){
+  load(file = paste("Z:/HMSNO/", species[i], ".Rdata", sep=""))
+  output <- summary(as.mcmc.list(out))
+  alpha0 <- rbind(alpha0, c("mean" = output$statistics[1,1], output$quantiles[1,]))
+  beta0 <- rbind(beta0, c("mean" = output$statistics[3,1], output$quantiles[3,]))
+  beta1 <- rbind(beta1, c("mean" = output$statistics[4,1], output$quantiles[4,]))
+  beta2 <- rbind(beta2, c("mean" = output$statistics[5,1], output$quantiles[5,]))
+  beta3 <- rbind(beta3, c("mean" = output$statistics[6,1], output$quantiles[6,]))
+  beta4 <- rbind(beta4, c("mean" = output$statistics[7,1], output$quantiles[7,]))
+  gamma0 <- rbind(gamma0, c("mean" = output$statistics[8,1], output$quantiles[8,]))
+  omega0 <- rbind(omega0, c("mean" = output$statistics[9,1], output$quantiles[9,]))
+  omega1 <- rbind(omega1, c("mean" = output$statistics[10,1], output$quantiles[10,]))
+  omega2 <- rbind(omega2, c("mean" = output$statistics[11,1], output$quantiles[11,]))
+  omega3 <- rbind(omega3, c("mean" = output$statistics[12,1], output$quantiles[12,]))
+}
+
+alpha0 <- alpha0[-1,]; beta0 <- beta0[-1,]; beta1 <- beta1[-1,]; beta2 <- beta2[-1,]; beta3 <- beta3[-1,]; beta4 <- beta4[-1,];
+gamma0 <- gamma0[-1,]; omega0 <- omega0[-1,]; omega1 <- omega1[-1,]; omega2 <- omega2[-1,]; omega3 <- omega3[-1,]
+
+out <- list(alpha0, beta0, beta1, beta2, beta3, beta4, gamma0, omega0, omega1, omega2, omega3)
+
+for(i in 1:11){
+  data.frame(species = names, out[[i]]) %>%
+    ggplot(.) + 
+    geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
+                  width = 0.275) +
+    geom_errorbar(aes(x = species, ymin = X2.5., ymax = X97.5.),
+                  width = 0, size = 1.25) +
+    geom_errorbar(aes(x = species, ymin = X25., ymax = X75.),
+                  width = 0, size = 3) +
+    geom_hline(yintercept = 0, alpha = 0.75) +
+    theme_few() +
+    theme(panel.background = element_rect(fill = "transparent", color = NA),
+          axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
+          legend.position = "none") +
+    labs(y = expression(), x = expression())
+  
+}
