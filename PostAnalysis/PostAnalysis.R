@@ -10,6 +10,13 @@ library(dplyr)
 load(file  = "~/HMSNO/DataAnalysis/HMSNO_out.Rdata")
 
 
+Effort <- Data %>% 
+  mutate(siteID = as.numeric(as.factor(`deployment ID`)),
+         year = as.integer(as.factor(Year))) %>% 
+  group_by(park, year) %>% 
+  summarize(nsite = n_distinct(siteID), days = sum(days))
+Effort$park <- as.factor(Effort$park)
+
 #-Summary-#
 
 names <- factor(c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
@@ -18,16 +25,18 @@ names <- factor(c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
           "Harvey's", "Ogilby's", "Peters's","White-bellied", 
           "Yellow-backed", "Community"))
 
-out <- summary(output[c(1:4)][,487:512])
+out <- summary(output[c(1:4)][,487:556])
 
-ni <- 8000 #derive this
+nchains <- length(output)
+ni <- length(unlist(output[c(1)][,1])) * nchains
+
 
 N <- array(NA, dim = c(nspec,npark,nyrs,ni))
 
 for(s in 1:nspec){
   for(i in 1:npark){
     for(t in nyrstr[i]:nyrend[i]){
-      N[s,i,t,] <- unlist(output[c(1:4)][,paste("Npark[", t, ", ", i, ", ", s, "]", sep = "")])
+      N[s,i,t,] <- unlist(output[c(1:nchains)][,paste("Npark[", t, ", ", i, ", ", s, "]", sep = "")])
     }
   }
 }
@@ -48,8 +57,17 @@ low <- reshape2::melt(N2.5, varnames = c("species", "park", "year"), value.name 
 data$`97.5%` <- high
 data$`2.5%` <- low
 
+data <- data %>% 
+  left_join(., Effort, by = c("park", "year")) %>%
+  mutate(abundance_site = abundance/nsite,
+         `97.5%_site` = `97.5%`/nsite,
+         `2.5%_site` = `2.5%`/nsite,
+         abundance_days = abundance/days,
+         `97.5%_days` = `97.5%`/days,
+         `2.5%_days` = `2.5%`/days)
+
 data %>% 
-  filter(park != "4" & park != "6") %>%
+  #filter(park != "4" & park != "6") %>%
   ggplot(., aes(x = year, y = abundance)) +
   geom_line(aes(col = park)) + 
   geom_ribbon(aes(x = year, ymin = `2.5%`, ymax = `97.5%`, fill = park), alpha = 0.5) +
@@ -58,15 +76,24 @@ data %>%
 
 data %>% 
   #filter(park != "4" & park != "6") %>%
+  ggplot(., aes(x = year, y = abundance_site)) +
+  geom_line(aes(col = park)) + 
+  geom_ribbon(aes(x = year, ymin = `2.5%_site`, ymax = `97.5%_site`, fill = park), alpha = 0.5) +
+  facet_wrap(. ~ species) +
+  theme_few() +
+  labs(y = "Abundance", )
+
+data %>% 
+  #filter(park != "4" & park != "6") %>%
   ggplot(., aes(x = year, y = abundance)) +
   geom_line(aes(col = species)) + 
   geom_ribbon(aes(x = year, ymin = `2.5%`, ymax = `97.5%`, fill = species), alpha = 0.5) +
   facet_wrap(. ~ park) +
   theme_few() +
-  theme(panel.background = element_rect(fill = "transparent", color = NA),
-        axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
-        legend.position = "none") +
-  labs(y ="Detection probability", x = expression())
+  # theme(panel.background = element_rect(fill = "transparent", color = NA),
+  #       axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
+  #       legend.position = "none") +
+  # labs(y ="Detection probability", x = expression())
 
 
 
