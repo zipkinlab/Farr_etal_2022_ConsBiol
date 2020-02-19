@@ -66,13 +66,15 @@ Data <- Data %>% group_by(`deployment ID`) %>% filter(n() > 2) %>% ungroup()
 #Arrange dataframe
 Data <- Data %>% arrange(park, Year, `deployment ID`) %>%
   mutate(siteID = as.numeric(factor(`deployment ID`, levels = unique(`deployment ID`))),
-         parkID = as.numeric(park))
+         parkID = as.numeric(park),
+         yearID = as.numeric(as.factor(Year)),
+         specID = as.numeric(as.factor(species)))
 
 #Convert to single vector format
-Data2 <- melt(Data, id = c("parkID", "siteID", "Year", "species", "days", "elevation", "edge"))
+#Data2 <- melt(Data, id = c("park", "deployment ID", "parkID", "siteID", "Year", "species", "days", "elevation", "edge"))
 
 #Occupancy data
-y <- Data2$value
+#y <- Data2$value
 
 #Indices
 df <- Data %>% group_by(parkID, siteID) %>% summarize(minYear = min(Year), maxYear = max(Year))
@@ -101,13 +103,16 @@ nsitestr <- parkdf$minSite
 nsiteend <- parkdf$maxSite
 
 #Nested indices
-yr <- as.numeric(as.factor(Data2$Year))
-site <- Data2$siteID
-spec <- as.numeric(as.factor(Data2$species))
-park <- Data2$parkID
+# yr <- as.numeric(as.factor(Data2$Year))
+# site <- Data2$siteID
+# spec <- as.numeric(as.factor(Data2$species))
+yr <- Data$yearID
+site <- Data$siteID
+spec <- Data$specID
+park <- df$parkID
 
-Data2 %>% mutate(speciesID = as.numeric(as.factor(species))) %>%
-  group_by(speciesID) %>% summarize(min(parkID), max(parkID), min(siteID), max(siteID))
+# Data2 %>% mutate(speciesID = as.numeric(as.factor(species))) %>%
+#   group_by(speciesID) %>% summarize(min(parkID), max(parkID), min(siteID), max(siteID))
 
 specSite <- matrix(NA, nrow = nsites, ncol = nspec)
 specPark <- matrix(NA, nrow = npark, ncol = nspec) #specify 4 as max park of a species
@@ -151,6 +156,24 @@ days <- dcast(Cov %>% select(`deployment ID`, Year, days), `deployment ID` ~ Yea
 days <- t(as.matrix(days[,-1]))
 density <- Data %>% distinct(`deployment ID`, density)
 density <- as.numeric(density$density)
+
+nrep <- 6 #define this elsewhere
+y.occ <- array(NA, dim = c(nrep, nyrs, nsites, nspec))
+for(s in 1:nspec){
+  for(j in 1:nsites){
+    for(t in (nstart[j]+1):nend[j]){
+      y.occ[1:nrep,t,j,s] <- rep(0,nrep)
+    }
+  }
+}
+for(i in 1:dim(Data)[1]){
+  for(k in 5:(nrep+5)){
+    if(is.na(Data[i,k])){
+      y.occ[k-4,yr[i],site[i],1:nspec] <- rep(NA, nspec)
+    }
+  }
+  y.occ[1:6,yr[i],site[i],spec[i]] <- as.numeric(Data[i,5:10])
+}
 
 #--------------#
 #-NIMBLE model-#
@@ -217,6 +240,12 @@ MSdyn.c <- nimbleCode({
   
   for(s in 1:nspec){
     
+    # for(k in 1:specNpark[s]){
+    #   for(i in specPark[k,s]){
+    #     
+    #   }
+    # } 
+    # for(i in specPark[1:specNpark[s],s]){
     for(i in 1:npark){
       beta0[i,s] ~ dnorm(mu.b0, tau.b0)
     }
@@ -233,6 +262,7 @@ MSdyn.c <- nimbleCode({
     # omega3[s] ~ dnorm(mu.o3, tau.o3)
     #gamma0[s] ~ dnorm(mu.g0, tau.g0)
     
+    #for(j in specSite[1:specNsite[s],s]){
     for(j in 1:nsites){
       
       logit(r[nstart[j],j,s]) <- logit(alpha0) + alpha1 * days[nstart[j],j]
@@ -266,6 +296,7 @@ MSdyn.c <- nimbleCode({
     #for(t in 2:nyrs){ #check 9
     #  log(gamma[t-1,s]) <- gamma0[s]
     #}#end t
+    #for(i in specPark[1:specNpark[s],s]){
     for(i in 1:npark){
       
       log(lambda[i,s]) <- beta0[i,s]
@@ -291,12 +322,20 @@ MSdyn.c <- nimbleCode({
 MSdyn.data <- list(y = y)
 MSdyn.con <- list(nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
                   yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days,
+                  # specPark = specPark, specSite = specSite, specNpark = specNpark, specNsite = specNsite,
                   nyrstr = nyrstr, nyrend = nyrend, nsitestr = nsitestr, nsiteend = nsiteend)
 
 #Initial values
 Nst <- array(NA, dim = c(nyrs, nsites, nspec))
 Sst <- array(NA, dim = c(nyrs-1, nsites, nspec))
 Gst <- array(NA, dim = c(nyrs-1, nsites, nspec))
+# for(s in 1:nspec){
+#   for(j in specSite[1:specNsite[s],s]){
+#     Nst[nstart[j],j,s] <- 10
+#     Sst[nstart[j]:(nend[j]-1),j,s] <- 5
+#     Gst[nstart[j]:(nend[j]-1),j,s] <- 2
+#   }
+# }
 for(j in 1:nsites){
   Nst[nstart[j],j,] <- 10
   Sst[nstart[j]:(nend[j]-1),j,] <- 5
@@ -333,6 +372,11 @@ for(j in 1:nsites){
 
 beta0.fun <- function(){
   beta0 <- matrix(NA, nrow = npark, ncol = nspec)
+  # for(s in 1:nspec){
+  #   for(i in specPark[1:specNpark[s],s]){
+  #     beta0[i,s] <- runif(1, -1, 1)
+  #   }
+  # }
   for(i in 1:npark){
     for(s in 1:nspec){
       beta0[i,s] <- runif(1, -1, 1)
@@ -550,4 +594,3 @@ save(MSdyn.o, file = paste("output", ID, ".Rdata", sep=""))
 #     points(t, mean(unlist(output[c(1:5)][,paste("Npark[", t, ", ", i, ", 8]", sep = "")])))
 #   }
 # }
-
