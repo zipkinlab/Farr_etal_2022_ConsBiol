@@ -27,7 +27,6 @@ nend <- HMSNO.data$nend
 parkspec <- HMSNO.con$parkspec
 sitespec <- HMSNO.con$sitespec
 
-
 #--------------#
 #-NIMBLE model-#
 #--------------#
@@ -35,130 +34,54 @@ sitespec <- HMSNO.con$sitespec
 MSdyn.c <- nimbleCode({
   
   mu.b0 ~ dnorm(0, 0.1)
-  # tau.b0 <- 1/(sig.b0 * sig.b0)
-  # sig.b0 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  # sig.b0 ~ dunif(0, 3)
   tau.b0 ~ dgamma(0.1, 0.1)
-  # mu.b1 ~ dnorm(0, 0.1)
-  # tau.b1 ~ dgamma(0.1, 0.1)
-  # mu.b2 ~ dnorm(0, 0.1)
-  # tau.b2 ~ dgamma(0.1, 0.1)
-  # mu.b3 ~ dnorm(0, 0.1)
-  # tau.b3 ~ dgamma(0.1, 0.1)
-  # mu.b4 ~ dnorm(0, 0.1)
-  # tau.b4 ~ dgamma(0.1, 0.1)
-  # mu.a0 ~ dnorm(0, 0.368) #dunif(0, 1)
-  # mu.a0L <- logit(mu.a0)
-  # mu.a0 ~ dunif(0, 1)
-  # tau.a0 ~ dgamma(0.1, 0.1)
-  #mu.o0 ~ dnorm(0, 0.368) #dunif(0, 1)
   mu.o0L <- logit(mu.o0)
   mu.o0 ~ dunif(0, 1)
-  #tau.o0 <- 1/(sig.o0 * sig.o0)
-  #sig.o0 ~ dt(0, pow(2.5,-2), 1) T(0,)
   tau.o0 ~ dgamma(0.1, 0.1)
-  # #mu.o1 ~ dnorm(0, 0.368)
   mu.o1 ~ dnorm(0, 0.1)
-  # #tau.o1 <- 1/(sig.o1 * sig.o1)
-  # #sig.o1 ~ dt(0, pow(2.5,-2), 1) T(0,)
   tau.o1 ~ dgamma(0.1, 0.1)
-  # #mu.o2 ~ dnorm(0, 0.368)
   mu.o2 ~ dnorm(0, 0.1)
-  # #tau.o2 <- 1/(sig.o2 * sig.o2)
-  # #sig.o2 ~ dt(0, pow(2.5,-2), 1) T(0,)
   tau.o2 ~ dgamma(0.1, 0.1)
-  # #mu.o3 ~ dnorm(0, 0.368)
-  # mu.o3 ~ dnorm(0, 0.1)
-  # #tau.o3 <- 1/(sig.o3 * sig.o3)
-  # #sig.o3 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  # tau.o3 ~ dgamma(0.1, 0.1)
-  # #mu.g0 ~ dnorm(0, 0.1)
-  # #tau.g0 <- 1/(sig.g0 * sig.g0)
-  # #sig.g0 ~ dt(0, pow(2.5,-2), 1) T(0,)
-  # #tau.g0 ~ dgamma(0.1, 0.1)
   
   log(gamma) <- gamma0
   gamma0 ~ dnorm(0, 0.1)
   
-  #alpha1 ~ dnorm(0, 0.368)
   alpha0 ~ dunif(0, 1)
   alpha1 ~ dnorm(0, 0.1)
   
-  
-  # for(i in 1:npark){
-  #   eps[i] ~ dnorm(0, tau.p)
-  # }
-  
-  #tau.p ~ dgamma(0.1, 0.1)
-  
   for(s in 1:nspec){
     
-    # for(k in 1:specNpark[s]){
-    #   for(i in specPark[k,s]){
-    #     
-    #   }
-    # } 
-    # for(i in specPark[1:specNpark[s],s]){
-    for(i in 1:npark){
-      beta0[i,s] ~ dnorm(mu.b0, tau.b0)
-    }
-    
-    #beta0[s] ~ dnorm(mu.b0, sd = sig.b0) 
-    # beta1[s] ~ dnorm(mu.b1, tau.b1)
-    # beta2[s] ~ dnorm(mu.b2, tau.b2)
-    # beta3[s] ~ dnorm(mu.b3, tau.b3)
-    # beta4[s] ~ dnorm(mu.b4, tau.b4)
-    # alpha0[s] ~ dnorm(mu.a0L, tau.a0)
     omega0[s] ~ dnorm(mu.o0L, tau.o0)
     omega1[s] ~ dnorm(mu.o1, tau.o1)
     omega2[s] ~ dnorm(mu.o2, tau.o2)
-    # omega3[s] ~ dnorm(mu.o3, tau.o3)
-    #gamma0[s] ~ dnorm(mu.g0, tau.g0)
     
-    #for(j in specSite[1:specNsite[s],s]){
-    for(j in 1:nsites){
-      
-      logit(r[nstart[j],j,s]) <- logit(alpha0) + alpha1 * days[nstart[j],j]
-      
-      N[nstart[j],j,s] ~ dpois(lambda[park[j],s])
-      
-      #N[nstart[j],j,s] ~ dpois(lambda[j,s])
-      #log(lambda[j,s]) <- beta0[s] + eps[park[j]]
-      
-      
-      #+ beta1[s] * density[j] + beta2[s] * edge[nstart[j],j] +
-      #   beta3[s] * density[j] * edge[nstart[j],j] + beta4[s] * elev[nstart[j],j]
-      
-      for(t in (nstart[j]+1):nend[j]){
+    for(j in sitespec[1,s]:sitespec[nsite[s],s]){
+      logit(r[ns[j],j,s]) <- logit(alpha0) + alpha1 * days[ns[j],j]
+      N[ns[j],j,s] ~ dpois(lambda[park[j],s])
+      for(t in (ns[j]+1):ne[j]){
         
         logit(r[t,j,s]) <- alpha0 + alpha1 * days[t,j]
         
-        # logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[t,j] +
-        #   omega3[s] * density[j] * edge[t,j]
+        logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[t,j]
         
-        logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * density[j] + omega2[s] * edge[t,j] #+
-        #omega3[s] * density[j] * edge[t,j]
-        
+        N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
         S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
         #G[t-1,j,s] ~ dpois(gamma[t-1,s])
         G[t-1,j,s] ~ dpois(gamma)
-        N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
+        
       }#end t
     }#end j
     
-    #for(t in 2:nyrs){ #check 9
-    #  log(gamma[t-1,s]) <- gamma0[s]
-    #}#end t
-    #for(i in specPark[1:specNpark[s],s]){
-    for(i in 1:npark){
-      
-      log(lambda[i,s]) <- beta0[i,s]
-      
-      for(t in nyrstr[i]:nyrend[i]){
-        Npark[t,i,s] <- sum(N[t,nsitestr[i]:nsiteend[i],s])
+    for(i in 1:npark[s]){
+      beta0[parkspec[i,s],s] ~ dnorm(mu.b0, tau.b0)
+      log(lambda[parkspec[i,s],s]) <- beta0[parkspec[i,s],s]
+      for(t in nyrstr[parkspec[i,s]]:nyrend[parkspec[i,s]]){
+        Npark[t,parkspec[i,s],s] <- sum(N[t,nsitestr[parkspec[i,s]]:nsiteend[t,parkspec[i,s]],s])
       }#end t
     }#end i
+    
   }#end s
+  
   
   for(k in 1:nobs){
     y[k] ~ dbern(p[k])
@@ -167,33 +90,26 @@ MSdyn.c <- nimbleCode({
   
 })
 
-#--------------#
-#-Compile Data-#
-#--------------#
+#---------------#
+#-Inital values-#
+#---------------#
 
-#Data
-MSdyn.data <- list(y = y)
-MSdyn.con <- list(nobs = nobs, nstart = nstart, nend = nend, nsites = nsites, nspec = nspec, nyrs = nyrs, npark = npark,
-                  yr = yr, site = site, spec = spec, park = park, elev = elev, edge = edge, density = density, days = days,
-                  # specPark = specPark, specSite = specSite, specNpark = specNpark, specNsite = specNsite,
-                  nyrstr = nyrstr, nyrend = nyrend, nsitestr = nsitestr, nsiteend = nsiteend)
-
-#Initial values
 Nst <- array(NA, dim = c(nyrs, nsites, nspec))
 Sst <- array(NA, dim = c(nyrs-1, nsites, nspec))
 Gst <- array(NA, dim = c(nyrs-1, nsites, nspec))
-# for(s in 1:nspec){
-#   for(j in specSite[1:specNsite[s],s]){
-#     Nst[nstart[j],j,s] <- 10
-#     Sst[nstart[j]:(nend[j]-1),j,s] <- 5
-#     Gst[nstart[j]:(nend[j]-1),j,s] <- 2
-#   }
-# }
-for(j in 1:nsites){
-  Nst[nstart[j],j,] <- 10
-  Sst[nstart[j]:(nend[j]-1),j,] <- 5
-  Gst[nstart[j]:(nend[j]-1),j,] <- 2
+for(s in 1:nspec){
+  for(j in 1:nsite[s]){
+    jj <- sitespec[j,s]
+    Nst[nstart[jj],jj,s] <- 10
+    Sst[nstart[jj]:(nend[jj]-1),jj,s] <- 5
+    Gst[nstart[jj]:(nend[jj]-1),jj,s] <- 2
+  }
 }
+# for(j in 1:nsites){
+#   Nst[nstart[j],j,] <- 10
+#   Sst[nstart[j]:(nend[j]-1),j,] <- 5
+#   Gst[nstart[j]:(nend[j]-1),j,] <- 2
+# }
 
 # alpha0.fun <- function(){
 #   alpha0 <- NULL
@@ -224,15 +140,16 @@ for(j in 1:nsites){
 # }
 
 beta0.fun <- function(){
-  beta0 <- matrix(NA, nrow = npark, ncol = nspec)
+  beta0 <- matrix(NA, nrow = nparks, ncol = nspec)
   # for(s in 1:nspec){
   #   for(i in specPark[1:specNpark[s],s]){
   #     beta0[i,s] <- runif(1, -1, 1)
   #   }
   # }
-  for(i in 1:npark){
-    for(s in 1:nspec){
-      beta0[i,s] <- runif(1, -1, 1)
+  for(s in 1:nspec){
+    for(i in 1:npark[s]){
+      ii <- parkspec[i,s]
+      beta0[ii,s] <- runif(1, -1, 2)
     }
   }
   return(beta0)
@@ -319,7 +236,7 @@ params <- c("mu.b0", "tau.b0", "mu.o0", "tau.o0",
             "gamma0", "Npark")
 
 #MCMC settings
-MSdyn.m <- nimbleModel(MSdyn.c, constants = MSdyn.con, data = MSdyn.data, inits = inits())
+MSdyn.m <- nimbleModel(MSdyn.c, constants = HMSNO.con, data = HMSNO.data, inits = inits())
 
 MCMCconf <- configureMCMC(MSdyn.m, monitors = params)
 #MCMCconf$printSamplers(1:122)
@@ -424,10 +341,10 @@ MCMC <- buildMCMC(MCMCconf)
 
 MSdyn.comp <- compileNimble(MSdyn.m, MCMC)
 
-ni <- 200000
-nb <- 100000
-nc <- 1
-nt <- 50
+ni <- 10000
+nb <- 5000
+nc <- 3
+nt <- 5
 
 #Run NIMBLE model
 MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)
