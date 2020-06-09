@@ -1,199 +1,32 @@
-#-------------------#
-#-Working Directory-#
-#-------------------#
-
-#setwd("./DataFormat")
-
 #----------------#
 #-Load Libraries-#
 #----------------#
 
-library(readxl)
-library(dplyr)
-library(tidyr)
-library(reshape2)
 library(nimble)
-#library(compareMCMCs)
 library(coda)
 
 #-----------#
 #-Load Data-#
 #-----------#
 
-Data <- NULL
-files <- list.files(path = "~/HMSNO/DataFormat/EditedData", pattern = "Data", full.names = TRUE)
-for(i in 1:length(files)){
-  sheets <- excel_sheets(files[i])
-  for(j in 1:length(sheets)){
-    Temp <- read_excel(files[i], sheet = sheets[j])
-    Temp <- Temp %>% mutate(species = as.character(sheets[j]), park = as.factor(i)) %>% 
-      select(park, `deployment ID`, Year, species, ls(Temp, pattern = "R"), density)
-    Data <- bind_rows(Data, Temp)
-  }
-}
+load(file = "~/HMSNO/DataFormat/HMSNO.data.Rdata")
+load(file = "~/HMSNO/DataFormat/HMSNO.con.Rdata")
 
-covfile <- "~/HMSNO/DataFormat/RawData/camera trap metadata.xlsx"
-covsheets <- excel_sheets(covfile)
-covsheets <- covsheets[-3] #Remove Nyungwe
+#---------#
+#-Indices-#
+#---------#
 
-CovData <- NULL
-for(i in 1:5){
-  Temp <- read_excel(covfile, sheet = covsheets[i])
-  Temp <- Temp %>% select(`deployment ID`, days, elevation, edge, Year)
-  CovData <- bind_rows(CovData, Temp)
-}
+nspec <- HMSNO.con$nspec
+nparks <- max(HMSNO.data$park)
+npark <- HMSNO.con$npark
+nsites <- max(HMSNO.con$site)
+nsite <- HMSNO.con$nsite
+nyrs <- max(HMSNO.con$yr)
+nstart <- HMSNO.data$nstart
+nend <- HMSNO.data$nend
+parkspec <- HMSNO.con$parkspec
+sitespec <- HMSNO.con$sitespec
 
-CovData <- bind_rows(CovData, read_excel("~/HMSNO/DataFormat/EditedData/Data_Nyungwe_nig_sylv_April_1.xlsx", sheet = 1) %>%
-                       select(`deployment ID`, days, elevation, edge, Year)) %>%
-  bind_rows(., read_excel("~/HMSNO/DataFormat/EditedData/Data_Nyungwe_nig_sylv_April_1.xlsx", sheet = 2) %>%
-              select(`deployment ID`, days, elevation, edge, Year)) %>%
-  distinct()
-
-Data <- full_join(Data, CovData, by = c("deployment ID", "Year")) %>% drop_na()
-
-
-# nsites <- length(unique(Data$`deployment ID`))
-# npark <- length(unique(Data$park))
-# nyrs <- length(unique(Data$Year))
-# nreps <- 6
-# nspecies <- length(unique(Data$species))
-# 
-# specID <- as.numeric(as.factor(Data$species))
-# siteID <- as.numeric(as.factor(Data$`deployment ID`))
-# yrID <- as.numeric(as.factor(Data$Year))
-# rep <- as.numeric(as.factor(Data$R1))
-# 
-# occ <- array(NA, dim = c(nspecies,nsites,nyrs,nreps))
-# 
-# for(i in 1:dim(Data)[1]){
-#   occ[specID[i],siteID[i],yrID[i],] <- rep[i,]
-# }
-
-
-
-rm(Temp, CovData)
-
-#-------------#
-#-Format Data-#
-#-------------#
-
-#Convert to NAs
-Data[,5:10] <- apply(Data[,5:10], 2, function(y) as.numeric(gsub("-", NA, y)))
-
-#Remove cameras that were sampled in only 1 year
-Data <- Data %>% group_by(`deployment ID`) %>% filter(n() > 2) %>% ungroup()
-
-#Arrange dataframe
-Data <- Data %>% arrange(park, Year, `deployment ID`) %>%
-  mutate(siteID = as.numeric(factor(`deployment ID`, levels = unique(`deployment ID`))),
-         parkID = as.numeric(park),
-         yearID = as.numeric(as.factor(Year)),
-         specID = as.numeric(as.factor(species)))
-
-#Convert to single vector format
-#Data2 <- melt(Data, id = c("park", "deployment ID", "parkID", "siteID", "Year", "species", "days", "elevation", "edge"))
-
-#Occupancy data
-#y <- Data2$value
-
-#Indices
-df <- Data %>% group_by(parkID, siteID) %>% summarize(minYear = min(Year), maxYear = max(Year))
-df$nstart <- as.numeric(df$minYear) - as.numeric(min(df$minYear)) + 1
-df$nend <- 1 + as.numeric(max(df$maxYear)) - as.numeric(min(df$minYear)) - 
-  (as.numeric(max(df$maxYear)) - as.numeric(df$maxYear))
-
-nyrs <- as.numeric(max(df$maxYear)) - as.numeric(min(df$minYear)) + 1
-nsites <- as.numeric(Data %>% summarize(n_distinct(siteID)))
-nspec <- as.numeric(Data %>% summarize (n_distinct(species)))
-nobs <- length(y)
-npark <- max(df$parkID)
-nstart <- df$nstart
-nend <- df$nend
-
-parkdf <- Data %>% group_by(parkID) %>% 
-  summarize(minYear = min(Year), maxYear = max(Year), 
-            minSite = min(siteID),
-            maxSite = max(siteID))
-parkdf$nstart <- as.numeric(parkdf$minYear) - as.numeric(min(parkdf$minYear)) + 1
-parkdf$nend <- 1 + as.numeric(max(parkdf$maxYear)) - as.numeric(min(parkdf$minYear)) - 
-  (as.numeric(max(parkdf$maxYear)) - as.numeric(parkdf$maxYear))
-nyrstr <- parkdf$nstart
-nyrend <- parkdf$nend
-nsitestr <- parkdf$minSite
-nsiteend <- parkdf$maxSite
-
-#Nested indices
-# yr <- as.numeric(as.factor(Data2$Year))
-# site <- Data2$siteID
-# spec <- as.numeric(as.factor(Data2$species))
-yr <- Data$yearID
-site <- Data$siteID
-spec <- Data$specID
-park <- df$parkID
-
-# Data2 %>% mutate(speciesID = as.numeric(as.factor(species))) %>%
-#   group_by(speciesID) %>% summarize(min(parkID), max(parkID), min(siteID), max(siteID))
-
-specSite <- matrix(NA, nrow = nsites, ncol = nspec)
-specPark <- matrix(NA, nrow = npark, ncol = nspec) #specify 4 as max park of a species
-specNpark <- specNsite <- rep(NA, nspec)
-
-for(s in 1:nspec){
-  temp <- unique(Data2[spec==s,"siteID"])
-  specNsite[s] <- length(temp)
-  specSite[1:specNsite[s],s] <- temp 
-  temp <- unique(Data2[spec==s,"parkID"])
-  specNpark[s] <- length(temp)
-  specPark[1:specNpark[s],s] <- unique(Data2[spec==s,"parkID"])
-}
-
-
-# 
-# #Site indices
-# site1 <- cbind(as.factor(unique(Data[,c("deployment ID", "park", "Year")])$Year), 
-#               as.factor(unique(Data[,c("deployment ID", "park", "Year")])$park), 
-#               as.factor(unique(Data[,c("deployment ID", "park", "Year")])$`deployment ID`))
-# site2 <- list()
-# for(i in 1:npark){
-#   for(t in 1:nyrs){
-#     print(c(i,t))
-#     print(site1[which(site1[,1]==t&site1[,2]==i),3])
-#   }
-# }
-
-#Covariates
-Cov <- Data %>% group_by(`deployment ID`, Year) %>%
-  distinct(`deployment ID`, Year, .keep_all = TRUE)
-Cov$elevation <- scale(as.numeric(Cov$elevation))
-Cov$edge <- scale(as.numeric(Cov$edge))
-Cov$days <- scale(as.numeric(Cov$days))
-
-elev <- dcast(Cov %>% select(`deployment ID`, Year, elevation), `deployment ID` ~ Year)
-elev <- t(as.matrix(elev[,-1]))
-edge <- dcast(Cov %>% select(`deployment ID`, Year, edge), `deployment ID` ~ Year)
-edge <- t(as.matrix(edge[,-1]))
-days <- dcast(Cov %>% select(`deployment ID`, Year, days), `deployment ID` ~ Year)
-days <- t(as.matrix(days[,-1]))
-density <- Data %>% distinct(`deployment ID`, density)
-density <- as.numeric(density$density)
-
-nrep <- 6 #define this elsewhere
-y.occ <- array(NA, dim = c(nrep, nyrs, nsites, nspec))
-for(s in 1:nspec){
-  for(j in 1:nsites){
-    for(t in (nstart[j]+1):nend[j]){
-      y.occ[1:nrep,t,j,s] <- rep(0,nrep)
-    }
-  }
-}
-for(i in 1:dim(Data)[1]){
-  for(k in 5:(nrep+5)){
-    if(is.na(Data[i,k])){
-      y.occ[k-4,yr[i],site[i],1:nspec] <- rep(NA, nspec)
-    }
-  }
-  y.occ[1:6,yr[i],site[i],spec[i]] <- as.numeric(Data[i,5:10])
-}
 
 #--------------#
 #-NIMBLE model-#
