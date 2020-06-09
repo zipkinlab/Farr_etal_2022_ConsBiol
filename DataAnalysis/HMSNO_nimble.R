@@ -21,7 +21,7 @@ library(coda)
 #-----------#
 
 Data <- NULL
-files <- list.files(path = "./EditedData", pattern = "Data", full.names = TRUE)
+files <- list.files(path = "~/HMSNO/DataFormat/EditedData", pattern = "Data", full.names = TRUE)
 for(i in 1:length(files)){
   sheets <- excel_sheets(files[i])
   for(j in 1:length(sheets)){
@@ -32,7 +32,7 @@ for(i in 1:length(files)){
   }
 }
 
-covfile <- "./RawData/camera trap metadata.xlsx"
+covfile <- "~/HMSNO/DataFormat/RawData/camera trap metadata.xlsx"
 covsheets <- excel_sheets(covfile)
 covsheets <- covsheets[-3] #Remove Nyungwe
 
@@ -43,13 +43,33 @@ for(i in 1:5){
   CovData <- bind_rows(CovData, Temp)
 }
 
-CovData <- bind_rows(CovData, read_excel("./EditedData/Data_Nyungwe_nig_sylv_April_1.xlsx", sheet = 1) %>%
+CovData <- bind_rows(CovData, read_excel("~/HMSNO/DataFormat/EditedData/Data_Nyungwe_nig_sylv_April_1.xlsx", sheet = 1) %>%
                        select(`deployment ID`, days, elevation, edge, Year)) %>%
-  bind_rows(., read_excel("./EditedData/Data_Nyungwe_nig_sylv_April_1.xlsx", sheet = 2) %>%
+  bind_rows(., read_excel("~/HMSNO/DataFormat/EditedData/Data_Nyungwe_nig_sylv_April_1.xlsx", sheet = 2) %>%
               select(`deployment ID`, days, elevation, edge, Year)) %>%
   distinct()
 
 Data <- full_join(Data, CovData, by = c("deployment ID", "Year")) %>% drop_na()
+
+
+# nsites <- length(unique(Data$`deployment ID`))
+# npark <- length(unique(Data$park))
+# nyrs <- length(unique(Data$Year))
+# nreps <- 6
+# nspecies <- length(unique(Data$species))
+# 
+# specID <- as.numeric(as.factor(Data$species))
+# siteID <- as.numeric(as.factor(Data$`deployment ID`))
+# yrID <- as.numeric(as.factor(Data$Year))
+# rep <- as.numeric(as.factor(Data$R1))
+# 
+# occ <- array(NA, dim = c(nspecies,nsites,nyrs,nreps))
+# 
+# for(i in 1:dim(Data)[1]){
+#   occ[specID[i],siteID[i],yrID[i],] <- rep[i,]
+# }
+
+
 
 rm(Temp, CovData)
 
@@ -587,10 +607,10 @@ save(MSdyn.o, file = paste("output", ID, ".Rdata", sep=""))
 #traceplot(out[c(1:3)][,"Npark[1, 1, 1]"])
 #plot(unlist(output[c(1:5)][,"beta0[1]"]), unlist(output[c(1:5)][,"beta0[4]"])
 
-# for(i in 1:npark){
-#   plot(nyrstr[i], mean(unlist(output[c(1:5)][,paste("Npark[", nyrstr[i], ", ", i, ", 8]", sep = "")])), 
-#        xlim = c(1,9), ylim = c(0,500), xlab = "Abundance", ylab = "Year")
-#   for(t in (nyrstr[i] + 1):nyrend[i]){
-#     points(t, mean(unlist(output[c(1:5)][,paste("Npark[", t, ", ", i, ", 8]", sep = "")])))
-#   }
-# }
+for(i in 1:npark){
+  plot(nyrstr[i], mean(unlist(output[c(1:5)][,paste("Npark[", nyrstr[i], ", ", i, ", 8]", sep = "")])),
+       xlim = c(1,9), ylim = c(0,500), xlab = "Abundance", ylab = "Year")
+  for(t in (nyrstr[i] + 1):nyrend[i]){
+    points(t, mean(unlist(output[c(1:5)][,paste("Npark[", t, ", ", i, ", 8]", sep = "")])))
+  }
+}
