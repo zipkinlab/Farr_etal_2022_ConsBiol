@@ -27,6 +27,8 @@ nend <- HMSNO.data$nend
 parkspec <- HMSNO.con$parkspec
 sitespec <- HMSNO.con$sitespec
 
+HMSNO.con$nyrs <- nyrs
+
 #--------------#
 #-NIMBLE model-#
 #--------------#
@@ -42,18 +44,29 @@ MSdyn.c <- nimbleCode({
   tau.o1 ~ dgamma(0.1, 0.1)
   mu.o2 ~ dnorm(0, 0.1)
   tau.o2 ~ dgamma(0.1, 0.1)
-  
-  log(gamma) <- gamma0
-  gamma0 ~ dnorm(0, 0.1)
+  # mu.o3 ~ dnorm(0, 0.1)
+  # tau.o3 ~ dgamma(0.1, 0.1)
+  mu.g0 ~ dnorm(0, 0.1)
+  tau.g0 ~ dgamma(0.1, 0.1)
+  tau.phi ~ dgamma(0.1, 0.1)
+  # log(gamma) <- gamma0
+  # gamma0 ~ dnorm(0, 0.1)
   
   alpha0 ~ dunif(0, 1)
   alpha1 ~ dnorm(0, 0.1)
+  
+  for(t in 1:nyrs){
+    eps.o[t] ~ T(dnorm(0, tau.phi), -5, 5)
+  }#end t
   
   for(s in 1:nspec){
     
     omega0[s] ~ dnorm(mu.o0L, tau.o0)
     omega1[s] ~ dnorm(mu.o1, tau.o1)
     omega2[s] ~ dnorm(mu.o2, tau.o2)
+    # omega3[s] ~ dnorm(mu.o3, tau.o3)
+    gamma0[s] ~ dnorm(mu.g0, tau.g0)
+    log(gamma[s]) <- gamma0[s] 
     
     for(j in sitespec[1,s]:sitespec[nsite[s],s]){
       logit(r[ns[j],j,s]) <- logit(alpha0) + alpha1 * days[ns[j],j]
@@ -66,8 +79,8 @@ MSdyn.c <- nimbleCode({
         
         N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
         S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
-        #G[t-1,j,s] ~ dpois(gamma[t-1,s])
-        G[t-1,j,s] ~ dpois(gamma)
+        G[t-1,j,s] ~ dpois(gamma[s])
+        # G[t-1,j,s] ~ dpois(gamma)
         
       }#end t
     }#end j
@@ -183,19 +196,19 @@ omega0.fun <- function(){
   return(omega0)
 }
 
-# gamma0.fun <- function(){
-#   gamma0 <- NULL
-#   gamma0[1] <- runif(1, 0, 1)
-#   gamma0[2] <- runif(1, -0.2, 0.2)
-#   gamma0[3] <- runif(1, -1.5, -0.5)
-#   gamma0[4] <- runif(1, -2.5, -1.5)
-#   gamma0[5] <- runif(1, -0.6, -0.2)
-#   gamma0[6] <- runif(1, -3, -2)
-#   gamma0[7] <- runif(1, -1.5, -0.5)
-#   gamma0[8] <- runif(1, -3, -1)
-#   gamma0[9] <- runif(1, -3, -2)
-#   return(gamma0)
-# }
+gamma0.fun <- function(){
+  gamma0 <- NULL
+  gamma0[1] <- runif(1, 0, 1)
+  gamma0[2] <- runif(1, -0.2, 0.2)
+  gamma0[3] <- runif(1, -1.5, -0.5)
+  gamma0[4] <- runif(1, -2.5, -1.5)
+  gamma0[5] <- runif(1, -0.6, -0.2)
+  gamma0[6] <- runif(1, -3, -2)
+  gamma0[7] <- runif(1, -1.5, -0.5)
+  gamma0[8] <- runif(1, -3, -1)
+  gamma0[9] <- runif(1, -3, -2)
+  return(gamma0)
+}
 
 # inits <- function()list(N=Nst, S=Sst, G=Gst,
 #                         mu.a0 = runif(1, 0.1, 0.25), tau.a0 = runif(1, 0, 5), alpha0 = alpha0.fun(), alpha1 = runif(1, -0.25, 0),
@@ -214,25 +227,23 @@ omega0.fun <- function(){
 inits <- function()list(N=Nst, S=Sst, G=Gst,
                         alpha0 = runif(1, 0.15, 0.2), alpha1 = runif(1, -0.5, -0.45),
                         mu.b0 = runif(1, -0.3, 0.75), #sig.b0 = runif(1, 1, 2), beta0 = beta0.fun(),
-                        beta0 = beta0.fun(), tau.b0 = runif(1, 0, 1),
+                        beta0 = beta0.fun(), tau.b0 = runif(1, 0, 1), tau.phi = runif(1, 0, 1),
                         mu.o0 = runif(1, 0.5, 0.75), tau.o0 = runif(1, 0.5, 1.25), omega0 = omega0.fun(),
                         mu.o1 = runif(1, 0, 4), tau.o1 = runif(1, 0, 1), omega1 = runif(nspec, -5, 5),
                         mu.o2 = runif(1, -1, 1), tau.o2 = runif(1, 0, 10), omega2 = runif(nspec, -1, 1),
-                        gamma0 = runif(1, -2, -1.75) #, tau.p = runif(1, 0.5, 2)
+                        # mu.o3 = runif(1, -1, 1), tau.o3 = runif(1, 0, 10), omega3 = runif(nspec, -1, 1),
+                        mu.g0 = runif(1, -2, 0), tau.g0 = runif(1, 0, 1), gamma0 = gamma0.fun()
 )
 
 #Parameters to save
-# params <- c("mu.a0", "tau.a0", 
-#             "mu.b0", "tau.b0", "mu.b1", "tau.b1", "mu.b2", "tau.b2", "mu.b3", "tau.b3", "mu.b4", "tau.b4",
-#             "mu.o0", "tau.o0", "mu.o1", "tau.o1", "mu.o2", "tau.o2", "mu.o3", "tau.o3",
-#             "mu.g0", "tau.g0",
-#             "alpha0", "alpha1", "beta0", "beta1", "beta2", "beta3", "beta4",
-#             "omega0", "omega1", "omega2", "omega3", "gamma0")
-
 params <- c("mu.b0", "tau.b0", "mu.o0", "tau.o0", 
             "mu.o1", "tau.o1", "mu.o2", "tau.o2",
+            # "mu.o3", "tau.o3", 
+            "mu.g0", "tau.g0",
+            "tau.phi",
             "alpha0", "alpha1", "beta0",
-            "omega0", "omega1", "omega2",
+            "omega0", "omega1", "omega2", 
+            # "omega3",
             "gamma0", "Npark")
 
 #MCMC settings
@@ -321,17 +332,23 @@ for(i in 1:nspec){
       #                     type = "RW_block") 
       MCMCconf$addSampler(target = c(nFun("omega0", i), nFun("omega0", j)),
                           type = "RW_block")
+      MCMCconf$addSampler(target = c(nFun("gamma0", i), nFun("gamma0", j)),
+                          type = "RW_block")
     } 
   }
   # MCMCconf$addSampler(target = c("mu.b0", nFun("beta0", i)),
   #                     type = "RW_block") 
   MCMCconf$addSampler(target = c("mu.o0", nFun("omega0", i)),
+                      type = "AF_slice")
+  MCMCconf$addSampler(target = c("mu.g0", nFun("gamma0", i)),
                       type = "AF_slice")  
   MCMCconf$addSampler(target = c(nFun("omega0", i), nFun("omega1", i),
                                  nFun("omega2", i)),
                       type = "AF_slice")
+  # MCMCconf$addSampler(target = c(nFun("omega0", i), nFun("omega1", i),
+  #                                nFun("omega2", i), nFun("omega3", i)),
+  #                     type = "AF_slice")
 }
-
 
 #MCMCconf$addSampler(target = c('mu.b0', 'beta0'), type = "RW_block")
 
