@@ -43,10 +43,20 @@ MSdyn.c <- nimbleCode({
   mu.o0L <- logit(mu.o0)
   mu.o0 ~ dunif(0, 1)
   tau.o0 ~ dgamma(0.1, 0.1)
+  mu.o1 ~ dnorm(0, 0.1)
+  tau.o1 ~ dgamma(0.1, 0.1)
   mu.g0 ~ dnorm(0, 0.1)
   tau.g0 ~ dgamma(0.1, 0.1)
+  tau.phi ~ dgamma(0.1, 0.1)
+  alpha1 ~ dnorm(0, 0.1)
+  
+  for(t in 1:nyrs){
+    eps.o[t] ~ T(dnorm(0, tau.phi), -5, 5)
+  }#end t
   
   for(s in 1:nspec){
+    
+    omega1[s] ~ dnorm(mu.o1, tau.o1)
     
     for(j in sitespec[1,s]:sitespec[nsite[s],s]){
       logit(r[ns[j],j,s]) <- alpha0[park[j],s] + alpha1 * days[ns[j],j]
@@ -54,12 +64,11 @@ MSdyn.c <- nimbleCode({
       for(t in (ns[j]+1):ne[j]){
         
         logit(r[t,j,s]) <- alpha0[park[j],s] + alpha1 * days[t,j]
-        logit(omega[t-1,j,s]) <- omega0[park[j],s]
+        logit(omega[t-1,j,s]) <- omega0[park[j],s] + omega1[s] * edge[t-1,j] + eps.o[t]
         
         N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
         S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
         G[t-1,j,s] ~ dpois(gamma[park[j],s])
-        # G[t-1,j,s] ~ dpois(gamma)
         
       }#end t
     }#end j
@@ -229,16 +238,20 @@ inits <- function()list(N=Nst, S=Sst, G=Gst,
                         mu.a0 = runif(1, 0.1, 0.25), tau.a0 = runif(1, 0, 5),
                         mu.b0 = runif(1, -0.3, 0.75), tau.b0 = runif(1, 0, 1),
                         mu.o0 = runif(1, 0.5, 0.75), tau.o0 = runif(1, 0.5, 1.25),
+                        mu.o1 = runif(1, 0, 4), tau.o1 = runif(1, 0, 1),
                         mu.g0 = runif(1, -2, 0), tau.g0 = runif(1, 0, 1),
                         alpha0 = alpha0.fun(), alpha1 = runif(1, -0.5, -0.45),
-                        beta0 = beta0.fun(), omega0 = omega0.fun(), gamma0 = gamma0.fun()
+                        beta0 = beta0.fun(), omega0 = omega0.fun(), 
+                        omega1 = runif(nspec, -5, 5), gamma0 = gamma0.fun(),
+                        tau.phi = runif(1, 0, 1)
 )
 
 #Parameters to save
 params <- c("mu.a0", "tau.a0", "mu.b0", "tau.b0", 
-            "mu.o0", "tau.o0", "mu.g0", "tau.g0",
-            "alpha0", "alpha1", "beta0",
-            "omega0", "gamma0", "Npark")
+            "mu.o0", "tau.o0", "mu.o1", "tau.o1",
+            "mu.g0", "tau.g0", "tau.phi",
+            "alpha0", "alpha1", "beta0", "omega0", 
+            "omega1", "gamma0")
 
 #MCMC settings
 MSdyn.m <- nimbleModel(MSdyn.c, constants = HMSNO.con, data = HMSNO.data, inits = inits())
@@ -336,6 +349,8 @@ for(s in 1:nspec){
                         type = "AF_slice")
     MCMCconf$addSampler(target = c("mu.g0", nFun("gamma0", i, s)),
                         type = "AF_slice")
+    MCMCconf$addSampler(target = c(nFun("omega0", i, s), paste("omega1", "[", s, "]", sep = "")),
+                        type = "AF_slice")
   }#end i
 }#end s
 
@@ -349,7 +364,8 @@ nc <- 3
 nt <- 5
 
 #Run NIMBLE model
-MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)
+MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, 
+                   setSeed = c(1,2,3), samplesAsCodaMCMC = TRUE)
 
 #-Save output-#
 ID <- gsub(" ","_",Sys.time())
@@ -359,7 +375,8 @@ save(MSdyn.o, file = paste("output", ID, ".Rdata", sep=""))
 traceplot(MSdyn.o[c(1:3)][,attr(MSdyn.o$chain1, "dimnames")[[2]][543]])
 
 param.list <- c("mu.a0", "tau.a0", "mu.b0", "tau.b0", 
-                "mu.o0", "tau.o0", "mu.g0", "tau.g0", "alpha1",
+                "mu.o0", "tau.o0", "mu.o1", "tau.o1",
+                "mu.g0", "tau.g0", "tau.phi", "alpha1",
   "alpha0[2, 1]", "alpha0[2, 2]", "alpha0[6, 3]", 
   "alpha0[2, 4]", "alpha0[1, 5]", "alpha0[2, 5]",
   "alpha0[2, 6]", "alpha0[3, 6]", "alpha0[4, 6]",
@@ -375,7 +392,10 @@ param.list <- c("mu.a0", "tau.a0", "mu.b0", "tau.b0",
   "omega0[2, 6]", "omega0[3, 6]", "omega0[4, 6]",
   "omega0[5, 6]", "omega0[1, 7]", "omega0[6, 8]", 
   "omega0[1, 9]", "omega0[2, 9]", "omega0[3, 9]",
-  "omega0[4, 9]", "gamma0[2, 1]", "gamma0[2, 2]", "gamma0[6, 3]", 
+  "omega0[4, 9]", "omega1[1]", "omega1[2]", "omega1[3]",
+  "omega1[4]", "omega1[5]", "omega1[6]", "omega1[7]",
+  "omega1[8]", "omega1[9]",
+  "gamma0[2, 1]", "gamma0[2, 2]", "gamma0[6, 3]", 
   "gamma0[2, 4]", "gamma0[1, 5]", "gamma0[2, 5]",
   "gamma0[2, 6]", "gamma0[3, 6]", "gamma0[4, 6]",
   "gamma0[5, 6]", "gamma0[1, 7]", "gamma0[6, 8]", 
