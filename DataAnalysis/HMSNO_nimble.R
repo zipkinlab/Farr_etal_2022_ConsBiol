@@ -47,24 +47,33 @@ MSdyn.c <- nimbleCode({
   tau.o1 ~ dgamma(0.1, 0.1)
   mu.g0 ~ dnorm(0, 0.1)
   tau.g0 ~ dgamma(0.1, 0.1)
-  tau.phi ~ dgamma(0.1, 0.1)
+  tau.ot ~ dgamma(0.1, 0.1)
+  tau.op ~ dgamma(0.1, 0.1)
   alpha1 ~ dnorm(0, 0.1)
+  tau.ap ~ dgamma(0.1, 0.1)
   
   for(t in 1:nyrs){
-    eps.o[t] ~ T(dnorm(0, tau.phi), -5, 5)
+    eps.ot[t] ~ T(dnorm(0, tau.ot), -5, 5)
   }#end t
+  
+  for(i in 1:nparks){
+    eps.op[i] ~ T(dnorm(0, tau.op), -5, 5)
+    eps.ap[i] ~ T(dnorm(0, tau.ap), -5, 5)
+  }#end i
   
   for(s in 1:nspec){
     
+    alpha0[s] ~ dnorm(mu.a0L, tau.a0)
     omega1[s] ~ dnorm(mu.o1, tau.o1)
+    omega0[s] ~ dnorm(mu.o0, tau.o0)
     
     for(j in sitespec[1,s]:sitespec[nsite[s],s]){
-      logit(r[ns[j],j,s]) <- alpha0[park[j],s] + alpha1 * days[ns[j],j]
+      logit(r[ns[j],j,s]) <- alpha0[s] + alpha1 * days[ns[j],j] + eps.ap[park[j]]
       N[ns[j],j,s] ~ dpois(lambda[park[j],s])
       for(t in (ns[j]+1):ne[j]){
         
-        logit(r[t,j,s]) <- alpha0[park[j],s] + alpha1 * days[t,j]
-        logit(omega[t-1,j,s]) <- omega0[park[j],s] + omega1[s] * edge[t-1,j] + eps.o[t]
+        logit(r[t,j,s]) <- alpha0[s] + alpha1 * days[t,j] + eps.ap[park[j]]
+        logit(omega[t-1,j,s]) <- omega0[s] + omega1[s] * edge[t-1,j] + eps.ot[t] + eps.op[park[j]]
         
         N[t,j,s] <- S[t-1,j,s] + G[t-1,j,s]
         S[t-1,j,s] ~ dbin(omega[t-1,j,s], N[t-1,j,s])
@@ -74,9 +83,7 @@ MSdyn.c <- nimbleCode({
     }#end j
     
     for(i in 1:npark[s]){
-      alpha0[parkspec[i,s],s] ~ dnorm(mu.a0L, tau.a0)
       beta0[parkspec[i,s],s] ~ dnorm(mu.b0, tau.b0)
-      omega0[parkspec[i,s],s] ~ dnorm(mu.o0, tau.o0)
       gamma0[parkspec[i,s],s] ~ dnorm(mu.g0, tau.g0)
       
       log(lambda[parkspec[i,s],s]) <- beta0[parkspec[i,s],s]
@@ -115,30 +122,30 @@ for(s in 1:nspec){
 #   Gst[nstart[j]:(nend[j]-1),j,] <- 2
 # }
 
-# alpha0.fun <- function(){
-#   alpha0 <- NULL
-#   alpha0[1] <- runif(1, -1.5, -1)
-#   alpha0[2] <- runif(1, -1.5, -1)
-#   alpha0[3] <- runif(1, -2, -1.5)
-#   alpha0[4] <- runif(1, -2.5, -1.5)
-#   alpha0[5] <- runif(1, -1.5, -1)
-#   alpha0[6] <- runif(1, -1.5, -1)
-#   alpha0[7] <- runif(1, -2, -1.5)
-#   alpha0[8] <- runif(1, -4, -2)
-#   alpha0[9] <- runif(1, -2, -1.5)
-#   return(alpha0)
-# }
-
 alpha0.fun <- function(){
-  alpha0 <- matrix(NA, nrow = nparks, ncol = nspec)
-  for(s in 1:nspec){
-    for(i in 1:npark[s]){
-      ii <- parkspec[i,s]
-      alpha0[ii,s] <- runif(1, -3, -1)
-    }
-  }
+  alpha0 <- NULL
+  alpha0[1] <- runif(1, -1.5, -1)
+  alpha0[2] <- runif(1, -1.5, -1)
+  alpha0[3] <- runif(1, -2, -1.5)
+  alpha0[4] <- runif(1, -2.5, -1.5)
+  alpha0[5] <- runif(1, -1.5, -1)
+  alpha0[6] <- runif(1, -1.5, -1)
+  alpha0[7] <- runif(1, -2, -1.5)
+  alpha0[8] <- runif(1, -4, -2)
+  alpha0[9] <- runif(1, -2, -1.5)
   return(alpha0)
 }
+
+# alpha0.fun <- function(){
+#   alpha0 <- matrix(NA, nrow = nparks, ncol = nspec)
+#   for(s in 1:nspec){
+#     for(i in 1:npark[s]){
+#       ii <- parkspec[i,s]
+#       alpha0[ii,s] <- runif(1, -3, -1)
+#     }
+#   }
+#   return(alpha0)
+# }
 
 # beta0.fun <- function(){
 #   beta0 <- NULL
@@ -184,30 +191,30 @@ beta0.fun <- function(){
 #   return(beta4)
 # }
 
-# omega0.fun <- function(){
-#   omega0 <- NULL
-#   omega0[1] <- runif(1, 0.2, 0.4)
-#   omega0[2] <- runif(1, 0, 0.25)
-#   omega0[3] <- runif(1, 1, 1.5)
-#   omega0[4] <- runif(1, -1.5, -0.5)
-#   omega0[5] <- runif(1, 0.4, 0.6)
-#   omega0[6] <- runif(1, 1.9, 2.2)
-#   omega0[7] <- runif(1, -0.25, 0)
-#   omega0[8] <- runif(1, -0.5, 0)
-#   omega0[9] <- runif(1, 2, 2.25)
-#   return(omega0)
-# }
-
 omega0.fun <- function(){
-  omega0 <- matrix(NA, nrow = nparks, ncol = nspec)
-  for(s in 1:nspec){
-    for(i in 1:npark[s]){
-      ii <- parkspec[i,s]
-      omega0[ii,s] <- runif(1, -1, 2)
-    }
-  }
+  omega0 <- NULL
+  omega0[1] <- runif(1, 0.2, 0.4)
+  omega0[2] <- runif(1, 0, 0.25)
+  omega0[3] <- runif(1, 1, 1.5)
+  omega0[4] <- runif(1, -1.5, -0.5)
+  omega0[5] <- runif(1, 0.4, 0.6)
+  omega0[6] <- runif(1, 1.9, 2.2)
+  omega0[7] <- runif(1, -0.25, 0)
+  omega0[8] <- runif(1, -0.5, 0)
+  omega0[9] <- runif(1, 2, 2.25)
   return(omega0)
 }
+
+# omega0.fun <- function(){
+#   omega0 <- matrix(NA, nrow = nparks, ncol = nspec)
+#   for(s in 1:nspec){
+#     for(i in 1:npark[s]){
+#       ii <- parkspec[i,s]
+#       omega0[ii,s] <- runif(1, -1, 2)
+#     }
+#   }
+#   return(omega0)
+# }
 
 # gamma0.fun <- function(){
 #   gamma0 <- NULL
@@ -243,13 +250,15 @@ inits <- function()list(N=Nst, S=Sst, G=Gst,
                         alpha0 = alpha0.fun(), alpha1 = runif(1, -0.5, -0.45),
                         beta0 = beta0.fun(), omega0 = omega0.fun(), 
                         omega1 = runif(nspec, -5, 5), gamma0 = gamma0.fun(),
-                        tau.phi = runif(1, 0, 1)
+                        tau.ot = runif(1, 0, 1), tau.op = runif(1, 0, 1),
+                        tau.ap = runif(1, 0, 1)
 )
 
 #Parameters to save
 params <- c("mu.a0", "tau.a0", "mu.b0", "tau.b0", 
             "mu.o0", "tau.o0", "mu.o1", "tau.o1",
-            "mu.g0", "tau.g0", "tau.phi",
+            "mu.g0", "tau.g0", "tau.ot", "tau.op",
+            "tau.ap",
             "alpha0", "alpha1", "beta0", "omega0", 
             "omega1", "gamma0")
 
@@ -258,12 +267,16 @@ MSdyn.m <- nimbleModel(MSdyn.c, constants = HMSNO.con, data = HMSNO.data, inits 
 
 MCMCconf <- configureMCMC(MSdyn.m, monitors = params)
 
-MCMCconf$addSampler(target = c("alpha0[2,1]", "alpha0[2,2]", "alpha0[6,3]", 
-                               "alpha0[2,4]", "alpha0[1,5]", "alpha0[2,5]",
-                               "alpha0[2,6]", "alpha0[3,6]", "alpha0[4,6]",
-                               "alpha0[5,6]", "alpha0[1,7]", "alpha0[6,8]", 
-                               "alpha0[1,9]", "alpha0[2,9]", "alpha0[3,9]",
-                               "alpha0[4,9]"),
+# MCMCconf$addSampler(target = c("alpha0[2,1]", "alpha0[2,2]", "alpha0[6,3]", 
+#                                "alpha0[2,4]", "alpha0[1,5]", "alpha0[2,5]",
+#                                "alpha0[2,6]", "alpha0[3,6]", "alpha0[4,6]",
+#                                "alpha0[5,6]", "alpha0[1,7]", "alpha0[6,8]", 
+#                                "alpha0[1,9]", "alpha0[2,9]", "alpha0[3,9]",
+#                                "alpha0[4,9]"),
+#                     type = "RW_block")
+
+MCMCconf$addSampler(target = c("alpha0[1]", "alpha0[2]", "alpha0[3]", "alpha0[4]", "alpha0[5]",
+                               "alpha0[6]", "alpha0[7]", "alpha0[8]", "alpha0[9]"),
                     type = "RW_block")
 
 MCMCconf$addSampler(target = c("beta0[2,1]", "beta0[2,2]", "beta0[6,3]", 
@@ -274,12 +287,16 @@ MCMCconf$addSampler(target = c("beta0[2,1]", "beta0[2,2]", "beta0[6,3]",
                                "beta0[4,9]"),
                     type = "RW_block")
 
-MCMCconf$addSampler(target = c("omega0[2,1]", "omega0[2,2]", "omega0[6,3]", 
-                               "omega0[2,4]", "omega0[1,5]", "omega0[2,5]",
-                               "omega0[2,6]", "omega0[3,6]", "omega0[4,6]",
-                               "omega0[5,6]", "omega0[1,7]", "omega0[6,8]", 
-                               "omega0[1,9]", "omega0[2,9]", "omega0[3,9]",
-                               "omega0[4,9]"),
+# MCMCconf$addSampler(target = c("omega0[2,1]", "omega0[2,2]", "omega0[6,3]", 
+#                                "omega0[2,4]", "omega0[1,5]", "omega0[2,5]",
+#                                "omega0[2,6]", "omega0[3,6]", "omega0[4,6]",
+#                                "omega0[5,6]", "omega0[1,7]", "omega0[6,8]", 
+#                                "omega0[1,9]", "omega0[2,9]", "omega0[3,9]",
+#                                "omega0[4,9]"),
+#                     type = "RW_block")
+
+MCMCconf$addSampler(target = c("omega0[1]", "omega0[2]", "omega0[3]", "omega0[4]", "omega0[5]",
+                               "omega0[6]", "omega0[7]", "omega0[8]", "omega0[9]"),
                     type = "RW_block")
 
 MCMCconf$addSampler(target = c("gamma0[2,1]", "gamma0[2,2]", "gamma0[6,3]", 
@@ -296,6 +313,10 @@ nFun <- function(node, i, s){
   paste(node, "[", i, ",", s, "]", sep = "")
 }
 
+nFun2 <- function(node, s){
+  paste(node, "[", s, "]", sep = "")
+}
+
 omit <- NULL
 
 for(s in 1:nspec){
@@ -309,12 +330,12 @@ for(s in 1:nspec){
         # print(c(nFun("beta0", i, s), nFun("beta0", ii, s)))
         # print(c(nFun("omega0", i, s), nFun("omega0", ii, s)))
         # print(c(nFun("gamma0", i, s), nFun("gamma0", ii, s)))
-        MCMCconf$addSampler(target = c(nFun("alpha0", i, s), nFun("alpha0", ii, s)),
-                            type = "RW_block")
+        # MCMCconf$addSampler(target = c(nFun("alpha0", i, s), nFun("alpha0", ii, s)),
+        #                     type = "RW_block")
         MCMCconf$addSampler(target = c(nFun("beta0", i, s), nFun("beta0", ii, s)),
                             type = "RW_block")
-        MCMCconf$addSampler(target = c(nFun("omega0", i, s), nFun("omega0", ii, s)),
-                            type = "RW_block")
+        # MCMCconf$addSampler(target = c(nFun("omega0", i, s), nFun("omega0", ii, s)),
+        #                     type = "RW_block")
         MCMCconf$addSampler(target = c(nFun("gamma0", i, s), nFun("gamma0", ii, s)),
                             type = "RW_block")
       }#end ii
@@ -326,12 +347,12 @@ for(s in 1:nspec){
           # print(c(nFun("beta0", i, s), nFun("beta0", ii, ss)))
           # print(c(nFun("omega0", i, s), nFun("omega0", ii, ss)))
           # print(c(nFun("gamma0", i, s), nFun("gamma0", ii, ss)))
-          MCMCconf$addSampler(target = c(nFun("alpha0", i, s), nFun("alpha0", ii, ss)),
-                              type = "RW_block")
+          # MCMCconf$addSampler(target = c(nFun("alpha0", i, s), nFun("alpha0", ii, ss)),
+          #                     type = "RW_block")
           MCMCconf$addSampler(target = c(nFun("beta0", i, s), nFun("beta0", ii, ss)),
                               type = "RW_block")
-          MCMCconf$addSampler(target = c(nFun("omega0", i, s), nFun("omega0", ii, ss)),
-                              type = "RW_block")
+          # MCMCconf$addSampler(target = c(nFun("omega0", i, s), nFun("omega0", ii, ss)),
+          #                     type = "RW_block")
           MCMCconf$addSampler(target = c(nFun("gamma0", i, s), nFun("gamma0", ii, ss)),
                               type = "RW_block")
         }#end ii
@@ -341,17 +362,33 @@ for(s in 1:nspec){
     # print(c("mu.b0", nFun("beta0", i, s)))
     # print(c("mu.o0", nFun("omega0", i, s)))
     # print(c("mu.g0", nFun("gamma0", i, s)))
-    MCMCconf$addSampler(target = c("mu.a0", nFun("alpha0", i, s)),
-                        type = "AF_slice")
+    # MCMCconf$addSampler(target = c("mu.a0", nFun("alpha0", i, s)),
+    #                     type = "AF_slice")
     MCMCconf$addSampler(target = c("mu.b0", nFun("beta0", i, s)),
                         type = "AF_slice")
-    MCMCconf$addSampler(target = c("mu.o0", nFun("omega0", i, s)),
-                        type = "AF_slice")
+    # MCMCconf$addSampler(target = c("mu.o0", nFun("omega0", i, s)),
+    #                     type = "AF_slice")
     MCMCconf$addSampler(target = c("mu.g0", nFun("gamma0", i, s)),
                         type = "AF_slice")
-    MCMCconf$addSampler(target = c(nFun("omega0", i, s), paste("omega1", "[", s, "]", sep = "")),
-                        type = "AF_slice")
+    # MCMCconf$addSampler(target = c(nFun2("omega0", i, s), nFun2("omega1", s)),
+    #                     type = "AF_slice")
   }#end i
+  if(s != nspec){
+    for(ss in species[-omit]){
+    MCMCconf$addSampler(target = c(nFun2("alpha0", s), nFun2("alpha0", ss)),
+                        type = "RW_block")
+    MCMCconf$addSampler(target = c(nFun2("omega0", s), nFun2("omega0", ss)),
+                      type = "RW_block")
+    MCMCconf$addSampler(target = c(nFun2("omega0", s), nFun2("omega1", s)),
+                      type = "AF_slice")
+    }#end ss
+  }#end if
+  MCMCconf$addSampler(target = c("mu.o0", nFun2("omega0", s)),
+                      type = "AF_slice")
+  MCMCconf$addSampler(target = c("mu.a0", nFun2("alpha0", s)),
+                      type = "AF_slice")
+  MCMCconf$addSampler(target = c("alpha1", nFun2("alpha0", s)),
+                      type = "AF_slice")
 }#end s
 
 MCMC <- buildMCMC(MCMCconf)
