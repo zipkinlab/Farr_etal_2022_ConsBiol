@@ -1,7 +1,8 @@
 #TODO:
 
-#remove NAs by filtering for day > 1
 #nstart:nend would need to become ragged array skipping years when sampling doesn't occur at a site
+
+#Add UDZ other ungulates
 
 #----------------#
 #-Load Libraries-#
@@ -27,6 +28,39 @@ for(i in 1:length(files)){
   }
 }
 
+#UDZ ungulates 2018-2019
+sheets <- excel_sheets("~/HMSNO/DataFormat/EditedData/UDZ_ungulates_2018_2019.xlsx")
+UDZdf <- NULL
+for(j in 3:6){
+  Temp <- read_excel("~/HMSNO/DataFormat/EditedData/UDZ_ungulates_2018_2019.xlsx",
+                     sheet = sheets[j])
+  UDZdf <- bind_rows(UDZdf, Temp)
+}
+
+Data <- bind_rows(Data, UDZdf %>% select(Trap...2, Year, Species, ls(Temp, pattern = "R")) %>% select(-R7) %>%
+  rename(`deployment ID` = Trap...2, species = Species) %>%
+  mutate(species = recode(species, "Cephalophus harveyi" = "harveyi", "Cephalophus spadix" = "spadix", 
+                          "Nesotragus moschatus" = "moschatus", "Tragelaphus scriptus" = "scriptus"),
+         park = as.factor(5), density = 0) %>%
+  relocate(park, `deployment ID`))
+
+#Remaining ungulates
+sheets <- excel_sheets("~/HMSNO/DataFormat/EditedData/Remaining_ungulates.xlsx")
+RUdf <- NULL
+for(k in 1:length(sheets)){
+  Temp <- read_excel("~/HMSNO/DataFormat/EditedData/Remaining_ungulates.xlsx",
+                     sheet = sheets[k])
+  RUdf <- bind_rows(RUdf, Temp)
+}
+
+Data <- bind_rows(Data, RUdf %>% select(park, `deployment ID`, Year, Species, ls(Temp, pattern = "R"), density) %>%
+  rename(species = Species) %>%
+  mutate(species = recode(species, "Tragelaphus scriptus" = "scriptus",
+                                   "Tragelaphus spekii" = "spekii"),
+         park = as.factor(park)))
+  
+#Site data
+
 SiteData <- NULL
 file <- list.files(path = "~/HMSNO/DataFormat/RawData", pattern = "metadata", full.names = TRUE)
 sheets <- excel_sheets(file)
@@ -44,23 +78,47 @@ SiteData <- bind_rows(SiteData, read_excel("~/HMSNO/DataFormat/EditedData/Data_N
   distinct() %>%
   select(`deployment ID`, days, elevation, edge, Year)
 
+SiteData <- bind_rows(SiteData, SiteData %>% filter(grepl("CT-UDZ", `deployment ID`) & Year >= 2016) %>%
+        mutate(Year = ifelse(Year == 2016, 2018, 2019),
+               days = read_excel("~/HMSNO/DataFormat/EditedData/UDZ_ungulates_2018_2019.xlsx", sheet = 4) %>%
+                      select(trapdays) %>% .$trapdays))
+
 #-------------#
 #-Format Data-#
 #-------------#
 
 Data[,5:10] <- apply(Data[,5:10], 2, function(y) as.numeric(gsub("-", NA, y)))
 
-park.levels <- c("1" = "2", "2" = "3", "3" = "4", "4" = "1", "5" = "6", "6" = "5")
+# park.levels <- c("1" = "2", "2" = "3", "3" = "4", "4" = "1", "5" = "6", "6" = "5")
+park.levels <- c("1" = "5", "2" = "6", "3" = "4", "4" = "1", "5" = "3", "6" = "2")
 
 Data <- Data %>% mutate(`deployment ID` = ifelse(species == "sylvilocutor" & Year == "2010" & park == 1,
                                                  gsub("TEAM-001", "CT", `deployment ID`), `deployment ID`),
                         `deployment ID` = ifelse(species == "sylvilocutor" & Year == "2010" & park == 1,
                                                  gsub("-2010", "", `deployment ID`), `deployment ID`),
-                        park = fct_recode(factor(park, levels = c("2","3","4","1","6","5")), !!!park.levels)) %>% 
+                        park = fct_recode(factor(park, levels = c("5","6","4","1","3","2")), !!!park.levels)) %>% 
                 arrange(park, Year, `deployment ID`)
 
 
 Data <- left_join(Data, SiteData, by = c("deployment ID", "Year"))
+
+#Control for days sampled
+Data$days[Data$days < 0] <- 0 #Set negative days to 0
+Data$days[Data$days > 30] <- 30 #Truncate days at max 30 days
+Data$days[Data$days == 0] <- NA #Set 0 days to NA (ie, no sampling)
+Data[is.na(Data$days),5:10] <- NA #Set all occ data to NA for sites with NA days (ie, no sampling)
+Data <- Data %>% mutate(R6 = replace(R6, which(days>=25 & is.na(R6)), 0), #Replace values with NAs or 0s
+                        R6 = replace(R6, which(days<25), NA),
+                        R5 = replace(R5, which(days>=20 & is.na(R5)), 0),
+                        R5 = replace(R5, which(days<20), NA),
+                        R4 = replace(R4, which(days>=15 & is.na(R4)), 0),
+                        R4 = replace(R4, which(days<15), NA),
+                        R3 = replace(R3, which(days>=10 & is.na(R3)), 0),
+                        R3 = replace(R3, which(days<10), NA),
+                        R2 = replace(R2, which(days>=5 & is.na(R2)), 0),
+                        R2 = replace(R2, which(days<5), NA),
+                        R1 = replace(R1, which(days>0 & is.na(R1)), 0))
+
 
 Data <- Data %>% drop_na(days) %>%
   mutate(siteID = as.numeric(factor(`deployment ID`, levels = unique(`deployment ID`))),
@@ -68,6 +126,7 @@ Data <- Data %>% drop_na(days) %>%
          yearID = as.numeric(as.factor(Year)),
          specID = as.numeric(as.factor(species))) %>%
   arrange(parkID, yearID, siteID)
+
 
 Data.vec <- Data %>% 
   select(specID, parkID, siteID, yearID, ls(Data, pattern = "R")) %>%
