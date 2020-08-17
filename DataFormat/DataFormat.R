@@ -58,6 +58,21 @@ Data <- bind_rows(Data, RUdf %>% select(park, `deployment ID`, Year, Species, ls
   mutate(species = recode(species, "Tragelaphus scriptus" = "scriptus",
                                    "Tragelaphus spekii" = "spekii"),
          park = as.factor(park)))
+
+#Add missing UDZ data
+sheets <- excel_sheets("~/HMSNO/DataFormat/EditedData/Bushbuck_suni_UDZ.xlsx")
+UDZdf <- NULL
+for(k in 3:4){
+  Temp <- read_excel("~/HMSNO/DataFormat/EditedData/Bushbuck_suni_UDZ.xlsx",
+                     sheet = sheets[k])
+  Temp$park <- 5
+  UDZdf <- bind_rows(UDZdf, Temp)
+}
+
+Data <- bind_rows(Data, UDZdf %>% select(park, `deployment ID`, Year, species, ls(Temp, pattern = "R"), density) %>%
+        mutate(park = as.factor(park)))
+
+
   
 #Site data
 
@@ -87,8 +102,13 @@ SiteData <- bind_rows(SiteData, SiteData %>% filter(grepl("CT-UDZ", `deployment 
 #-Format Data-#
 #-------------#
 
+#Turn dashes to NAs
 Data[,5:10] <- apply(Data[,5:10], 2, function(y) as.numeric(gsub("-", NA, y)))
 
+#Convert CT-UDZ-1-14.1 to CT-UDZ-1-14
+Data$`deployment ID`[Data$`deployment ID` == "CT-UDZ-1-14.1"] <- "CT-UDZ-1-14"
+
+#Reorder park levels
 # park.levels <- c("1" = "2", "2" = "3", "3" = "4", "4" = "1", "5" = "6", "6" = "5")
 park.levels <- c("1" = "5", "2" = "6", "3" = "4", "4" = "1", "5" = "3", "6" = "2")
 
