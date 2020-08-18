@@ -139,6 +139,7 @@ Data <- Data %>% mutate(R6 = replace(R6, which(days>=25 & is.na(R6)), 0), #Repla
                         R2 = replace(R2, which(days<5), NA),
                         R1 = replace(R1, which(days>0 & is.na(R1)), 0))
 
+# Data$days[is.na(Data$days)] <- 0 #Reset no sampling to zero days
 
 Data <- Data %>% drop_na(days) %>%
   mutate(siteID = as.numeric(factor(`deployment ID`, levels = unique(`deployment ID`))),
