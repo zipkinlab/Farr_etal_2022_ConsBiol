@@ -1,88 +1,141 @@
+#TO DO: effort by year
+
+#-----------#
 #-Libraries-#
+#-----------#
 
 library(coda)
-library(ggplot2)
+library(tidyverse)
 library(ggthemes)
-library(dplyr)
 library(reshape2)
+library(grid)
+library(gridExtra)
+library(rnaturalearth)
 
+#-----------#
 #-Load data-#
+#-----------#
 
-load(file = "~/HMSNO/MSdynout.Rdata")
-load(file = "~/HMSNO/DataFormat/HMSNO.data.Rdata")
-load(file = "~/HMSNO/DataFormat/HMSNO.con.Rdata")
-load(file = "~/HMSNO/DataFormat/Effort.Rdata")
+files <- list.files(path = "Z:/HMSNO/DataAnalysis", pattern = "chain", full.names = TRUE)
 
+nc <- length(files)
 
-# Effort <- Data %>% 
-#   mutate(siteID = as.numeric(as.factor(`deployment ID`)),
-#          year = as.integer(as.factor(Year))) %>% 
-#   group_by(park, year) %>% 
-#   summarize(nsite = n_distinct(siteID), days = sum(days))
-# Effort$park <- as.factor(Effort$park)
+for(i in 1:nc){
+  load(files[i])
+}
 
-# Effort <- data.frame(park = HMSNO.data$park, t(HMSNO.data$days)) %>% 
-#   melt(id = "park") %>%
-#   mutate(year = as.numeric(variable)) %>%
-#   group_by(park, year) %>%
-#   summarize(nsite = n(), days = sum(value, na.rm = TRUE))
-#   
-#   group_by(park)
+out <- mcmc.list(mget(paste0("chain", 1:nc)))
 
-nspec <- HMSNO.con$nspec
-nparks <- max(HMSNO.data$park)
-nyrs <- max(HMSNO.con$yr)
-nyrstr <- HMSNO.con$nyrstr
-nyrend <- HMSNO.con$nyrend
-parkspec <- HMSNO.con$parkspec
-#-Summary-#
+load(file = "Z:/HMSNO/DataFormat/HMSNO.Adata.Rdata")
+load(file = "Z:/HMSNO/DataFormat/HMSNO.Acon.Rdata")
+# load(file = "Z:/HMSNO/DataFormat/Effort.Rdata")
 
-names <- factor(c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
-                  "Black-fronted", "Ogilby's",  "Abbott's", "Yellow-backed", "Community"),
-          levels =  c("Abbott's", "Bay", "Black-fronted", "Blue",
-          "Harvey's", "Ogilby's", "Peters's","White-bellied", 
-          "Yellow-backed", "Community"))
+#-------------#
+#-Attach data-#
+#-------------#
 
-output <- MSdyn.o
-nchains <- length(output)
-out <- summary(output[c(1:nchains)][,543:578])
-ni <- length(unlist(output[c(1)][,1])) * nchains
+attach(HMSNO.data)
+attach(HMSNO.con)
 
-N <- array(NA, dim = c(nspec,nparks,nyrs,ni))
+#------------#
+#-Parameters-#
+#------------#
 
-for(s in 1:nspec){
-  for(i in 1:nparks){
-    for(t in nyrstr[i]:nyrend[i]){
-      N[s,i,t,] <- unlist(output[c(1:nchains)][,paste("Npark[", t, ", ", i, ", ", s, "]", sep = "")])
+projection <- 10
+
+params <- attr(out[[1]], "dimnames")[[2]][!grepl("beta|Npark", attr(out[[1]], "dimnames")[[2]])]
+for(s in 1:nspecs){
+  for(i in parkS[s]:parkE[s]){
+    params <- c(params, paste0("beta0[", i, ", ", s, "]"))
+  }
+}
+
+for(s in 1:nspecs){
+  for(i in parkS[s]:parkE[s]){
+    for(t in nstart[i]:(nend[i]+projection)){
+      params <- c(params, paste0("Npark[", t, ", ", i, ", ", s, "]"))
     }
   }
 }
 
+#-------------#
+#-Convergence-#
+#-------------#
+
+Rhat <- gelman.diag(out[c(1:nc)][,params])
+if(all(Rhat[[1]][,1] < 1.1)){
+  print("Converged")
+}else{
+  tmp <- as.numeric(which(Rhat[[1]][,1] > 1.1))
+  print("Not converged")
+  print(params[tmp])
+  traceplot(out[c(1:nc)][,params[tmp]])
+}
+
+#-----------#
+#-Extaction-#
+#-----------#
+       
+output <- summary(out[c(1:nc)][,params])
+
+# names <- factor(c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
+#                   "Black-fronted", "Ogilby's",  "Abbott's", "Yellow-backed", "Community"),
+#           levels =  c("Abbott's", "Bay", "Black-fronted", "Blue",
+#           "Harvey's", "Ogilby's", "Peters's","White-bellied", 
+#           "Yellow-backed", "Community"))
+
+spec.names <- c("callipygus", "dorsalis", "harveyi", "leucogaster", 
+                  "monticola", "moschatus", "nigrifrons", "olgilvy",
+                  "scriptus", "spadix", "spekii", "sylvilocutor")
+
+park.names <- c("UDZ", "VIR", "NFNP", "BIF", "NNNP", "KRP")
+
+year.names <- function(x){
+  return(format(as.Date("2008", format = "%Y") + lubridate::years(x), "%Y"))
+}
+
+ni <- nc * length(out[[1]][,1])
+
+N <- array(NA, dim = c(nspecs,max(parkE),(max(nend)+projection),ni))
+
+for(s in 1:nspecs){
+  for(i in parkS[s]:parkE[s]){
+    for(t in nstart[i]:(nend[i]+projection)){
+      N[s,i,t,] <- unlist(out[c(1:nc)][,paste("Npark[", t, ", ", i, ", ", s, "]", sep = "")])
+    }
+  }
+}
 
 meanN <- apply(N, MARGIN = c(1,2,3), mean, na.rm = TRUE)
 N97.5 <- apply(N, MARGIN = c(1,2,3), quantile, probs = 0.975, na.rm = TRUE)
 N2.5 <- apply(N, MARGIN = c(1,2,3), quantile, probs = 0.025, na.rm = TRUE)
 
 data <- reshape2::melt(meanN, varnames = c("species", "parkID", "yearID"), value.name = "abundance")
-data$species <- factor(data$species,
-                       labels = c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue",
-                                      "Black-fronted", "Ogilby's",  "Abbott's", "Yellow-backed"))
-data$park <- as.factor(data$park)
+data$species <- factor(data$species, labels = spec.names)
+data$park <- factor(data$park, labels = park.names)
+data$year <- as.numeric(year.names(data$yearID))
 
 high <- reshape2::melt(N97.5, varnames = c("species", "parkID", "yearID"), value.name = "97.5%")$`97.5%`
 low <- reshape2::melt(N2.5, varnames = c("species", "parkID", "yearID"), value.name = "2.5%")$`2.5%`
 data$`97.5%` <- high
 data$`2.5%` <- low
 
-data <- data %>% 
-  left_join(., Effort, by = c("parkID", "yearID")) %>%
-  mutate(abundance_site = abundance/nsite,
-         `97.5%_site` = `97.5%`/nsite,
-         `2.5%_site` = `2.5%`/nsite,
-         abundance_days = abundance/days,
-         `97.5%_days` = `97.5%`/days,
-         `2.5%_days` = `2.5%`/days,
-         parkID = as.factor(parkID))
+# data <- data %>% 
+#   left_join(., Effort, by = c("parkID", "yearID"))
+
+data$effort <- nsite[data$parkID]
+
+# for(i in 1:dim(data)[1]){
+#   if(is.na(data$nsite[i])){
+#     data$nsite[i] <- print(max(data[data$park == data$park[i],"nsite"], na.rm = TRUE))
+#   }
+# }
+
+#FIX Effort to be by year
+data <- data %>%
+  mutate(abundance_site = abundance/effort,
+         `97.5%_site` = `97.5%`/effort,
+         `2.5%_site` = `2.5%`/effort)
 
 # data2 <- data.frame(t(rep(NA, dim(data)[2])))
 # 
@@ -93,109 +146,253 @@ data <- data %>%
 # }
 
 data %>% 
-  #filter(park != "4" & park != "6") %>%
-  ggplot(., aes(x = yearID, y = abundance)) +
-  geom_line(aes(col = parkID)) + 
-  geom_ribbon(aes(x = yearID, ymin = `2.5%`, ymax = `97.5%`, fill = parkID), alpha = 0.5) +
+  ggplot(., aes(x = year, y = abundance)) +
+  geom_line(aes(col = park)) + 
+  geom_ribbon(aes(x = year, ymin = `2.5%`, ymax = `97.5%`, fill = park), alpha = 0.5) +
   facet_wrap(. ~ species) +
+  scale_x_continuous(breaks = c(2010, 2015, 2020, 2025, 2030)) +
   theme_few()
 
 data %>% 
-  #filter(park != "4" & park != "6") %>%
-  ggplot(., aes(x = yearID, y = abundance_site)) +
-  geom_line(aes(col = parkID)) + 
-  geom_ribbon(aes(x = yearID, ymin = `2.5%_site`, ymax = `97.5%_site`, fill = parkID), alpha = 0.5) +
+  ggplot(., aes(x = year, y = abundance_site)) +
+  geom_line(aes(col = park)) + 
+  geom_ribbon(aes(x = year, ymin = `2.5%_site`, ymax = `97.5%_site`, fill = park), alpha = 0.5) +
   facet_wrap(. ~ species) +
+  scale_x_continuous(breaks = c(2010, 2015, 2020, 2025, 2030)) +
   theme_few() +
   labs(y = "Abundance")
 
 data %>% 
-  #filter(park != "4" & park != "6") %>%
-  ggplot(., aes(x = yearID, y = abundance)) +
+  ggplot(., aes(x = year, y = abundance)) +
   geom_line(aes(col = species)) + 
-  geom_ribbon(aes(x = yearID, ymin = `2.5%`, ymax = `97.5%`, fill = species), alpha = 0.5) +
-  facet_wrap(. ~ parkID) +
+  geom_ribbon(aes(x = year, ymin = `2.5%`, ymax = `97.5%`, fill = species), alpha = 0.5) +
+  facet_wrap(. ~ park) +
+  scale_x_continuous(breaks = c(2010, 2015, 2020, 2025, 2030)) +
   theme_few()
   # theme(panel.background = element_rect(fill = "transparent", color = NA),
   #       axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
   #       legend.position = "none") +
   # labs(y ="Detection probability", x = expression())
 
-Fig1 <- data %>% 
-  mutate(year = factor(as.character(yearID))) %>%
-  #filter(park != "4" & park != "6") %>%
+data %>% 
   ggplot(., aes(x = year, y = abundance_site)) +
   geom_line(aes(col = species)) + 
-  geom_line(aes(x = yearID, col = species)) +
-  geom_ribbon(aes(x = yearID, ymin = `2.5%_site`, ymax = `97.5%_site`, fill = species), alpha = 0.5) +
-  facet_wrap(. ~ parkID, scales='free_x', labeller = labeller(parkID = c("1" = "Korup",
-                                                        "2" = "Nouabale-Ndoki", 
-                                                        "3" = "Nyungwe", 
-                                                        "4" = "Bwindi", 
-                                                        "5" = "Virunga", 
-                                                        "6" = "Udzungwa"))) +
-  labs(y = "Abundance per site", x = "Year") +
-  theme_few()
+  geom_ribbon(aes(x = year, ymin = `2.5%_site`, ymax = `97.5%_site`, fill = species), alpha = 0.5) +
+  facet_wrap(. ~ park, scales = 'free_x') +
+  scale_x_continuous(breaks = c(2010, 2015, 2020, 2025, 2030)) +
+  theme_few() +
+  labs(y = "density (abundance/site)")
 
-Fig2 <- data %>% 
-  mutate(year = factor(as.character(yearID + 2008))) %>%
-  #filter(park != "4" & park != "6") %>%
-  ggplot(., aes(x = year, y = abundance_site)) +
-  geom_line(aes(col = species)) + 
-  geom_line(aes(x = yearID, col = species)) +
-  geom_ribbon(aes(x = yearID, ymin = `2.5%_site`, ymax = `97.5%_site`, fill = species), alpha = 0.5) +
-  facet_wrap(. ~ parkID, scales='free', labeller = labeller(parkID = c("1" = "Korup",
-                                                                       "2" = "Nouabale-Ndoki", 
-                                                                       "3" = "Nyungwe", 
-                                                                       "4" = "Bwindi", 
-                                                                       "5" = "Virunga", 
-                                                                       "6" = "Udzungwa"))) +
-  labs(y = "Abundance per site", x = "Year") +
-  theme_few()
 
-# alpha0 <- data.frame(species = names, mean = c(plogis(out$statistics[1:9,"Mean"]), out$statistics[13,"Mean"]),
-#                      l2.5 = c(plogis(out$quantiles[1:9,"2.5%"]), out$quantiles[13,"2.5%"]),
-#                      l25 = c(plogis(out$quantiles[1:9,"25%"]), out$quantiles[13,"25%"]),
-#                      u75 = c(plogis(out$quantiles[1:9,"75%"]), out$quantiles[13,"75%"]),
-#                      u97.5 = c(plogis(out$quantiles[1:9,"97.5%"]), out$quantiles[13,"97.5%"]))
 
-omega0 <- data.frame(species = names, mean = c(plogis(out$statistics[6:14,"Mean"]), out$statistics[3,"Mean"]),
-                     l2.5 = c(plogis(out$quantiles[6:14,"2.5%"]), out$quantiles[3,"2.5%"]),
-                     l25 = c(plogis(out$quantiles[6:14,"25%"]), out$quantiles[3,"25%"]),
-                     u75 = c(plogis(out$quantiles[6:14,"75%"]), out$quantiles[3,"75%"]),
-                     u97.5 = c(plogis(out$quantiles[6:14,"97.5%"]), out$quantiles[3,"97.5%"]))
+#------------------------------#
+#-Quasi-extinction probability-#
+#------------------------------#
 
-omega1 <- data.frame(species = names, mean = c(out$statistics[15:23,"Mean"], out$statistics[4,"Mean"]),
-                     l2.5 = c(out$quantiles[15:23,"2.5%"], out$quantiles[4,"2.5%"]),
-                     l25 = c(out$quantiles[15:23,"25%"], out$quantiles[4,"25%"]),
-                     u75 = c(out$quantiles[15:23,"75%"], out$quantiles[4,"75%"]),
-                     u97.5 = c(out$quantiles[15:23,"97.5%"], out$quantiles[4,"97.5%"]))
+#Summary statistics
+measurements <- c("Initial", "Final", "Projected", "Threshold", "QSE", "PopGrowth")
 
-omega2 <- data.frame(species = names, mean = c(out$statistics[24:32,"Mean"], out$statistics[5,"Mean"]),
-                     l2.5 = c(out$quantiles[24:32,"2.5%"], out$quantiles[5,"2.5%"]),
-                     l25 = c(out$quantiles[24:32,"25%"], out$quantiles[5,"25%"]),
-                     u75 = c(out$quantiles[24:32,"75%"], out$quantiles[5,"75%"]),
-                     u97.5 = c(out$quantiles[24:32,"97.5%"], out$quantiles[5,"97.5%"]))
+#Extract summary statistics
+Data.pop <- array(NA, dim = c(nspecs,max(parkE),length(measurements),ni))
+for(s in 1:nspecs){
+  for(i in parkS[s]:parkE[s]){
+    Data.pop[s,i,1,] <- N[s,i,nstart[i],]
+    Data.pop[s,i,2,] <- N[s,i,nend[i],]
+    Data.pop[s,i,3,] <- N[s,i,nend[i]+projection,]
+    Data.pop[s,i,4,] <- N[s,i,nstart[i],] * 0.2
+    Data.pop[s,i,5,] <- N[s,i,nend[i]+projection,] < (N[s,i,nstart[i],] * 0.2)
+    tmp2 <- 1
+    for(t in (nstart[i]+1):nend[i]){
+      tmp1 <- N[s,i,t,]/N[s,i,t-1,]
+      tmp2 <- tmp1 * tmp2
+    }
+    Data.pop[s,i,6,] <- tmp2^(1/(nend[i]-nstart[i]))
+  }
+}
 
-# FigA0 <- ggplot(alpha0) + 
-#   geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
-#                 width = 0.275) +
-#   geom_errorbar(aes(x = species, ymin = l2.5, ymax = u97.5),
-#                 width = 0, size = 1.25) +
-#   geom_errorbar(aes(x = species, ymin = l25, ymax = u75),
-#                 width = 0, size = 3) +
-#   coord_cartesian(ylim = c(0, 0.65)) +
-#   scale_y_continuous(expand = c(0, 0)) +
-#   geom_hline(yintercept = 0, alpha = 0.75) +
-#   theme_few() +
-#   theme(panel.background = element_rect(fill = "transparent", color = NA),
-#         axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
-#         legend.position = "none") +
-#     labs(y ="Detection probability", x = expression())
+#Calculate quantiles from MCMC
+Data.mean <- apply(Data.pop, MARGIN = c(1,2,3), mean, na.rm = TRUE)
+Data.97.5 <- apply(Data.pop, MARGIN = c(1,2,3), quantile, probs = 0.975, na.rm = TRUE)
+Data.2.5 <- apply(Data.pop, MARGIN = c(1,2,3), quantile, probs = 0.025, na.rm = TRUE)
 
-FigO0 <- ggplot(omega0) + 
+#Format summary statistics into dataframe
+qse <- full_join(full_join(dcast(melt(Data.mean, varnames = c("species", "parkID", "measurements")), formula = species + parkID ~ measurements), 
+                  dcast(melt(Data.2.5, varnames = c("species", "parkID", "measurements")), formula = species + parkID ~ measurements),
+                 by = c("species", "parkID")),
+                 dcast(melt(Data.97.5, varnames = c("species", "parkID", "measurements")), formula = species + parkID ~ measurements),
+                 by = c("species", "parkID"))
+colnames(qse) <- c("species", "park", paste0(measurements, rep(c("_mean", "_lower", "_upper"), each = length(measurements))))
+qse$species <- factor(qse$species, labels = spec.names)
+qse$park <- factor(qse$park, labels = park.names)
+qse <- qse[complete.cases(qse),]
+qse <- qse[,c("species", "park", paste0(rep(measurements, each = 3), c("_mean", "_lower", "_upper")))]
+
+#Remove columns
+qse <- qse[,-c(16,17)]
+qse$Percent_change <- (qse[,"Final_mean"] - qse[,"Initial_mean"])/qse[,"Initial_mean"]
+# qse$Projected_change <- (qse[,"Projected_mean"] - qse[,"Final_mean"])/qse[,"Final_mean"]
+
+#--------------------#
+#-Summary statistics-#
+#--------------------#
+
+#Inital abundances by species
+print(qse %>% group_by(species) %>% select(Initial_mean, Initial_lower, Initial_upper),
+      n = 26)
+
+print(qse %>% group_by(species) %>% summarize(sd(Initial_mean)),
+      n = 26)
+
+#Inital abundances by park
+print(qse %>% group_by(park) %>% arrange(park) %>% select(Initial_mean, Initial_lower, Initial_upper),
+      n = 26)
+
+print(qse %>% group_by(park) %>% arrange(park) %>% summarize(sd(Initial_mean)),
+      n = 26)
+
+#Final abundances by species
+print(qse %>% group_by(species) %>% select(Final_mean, Final_lower, Final_upper),
+      n = 26)
+
+#Final abundances by park
+print(qse %>% group_by(park) %>% arrange(park) %>% select(Final_mean, Final_lower, Final_upper),
+      n = 26)
+
+#Population growth by species
+print(qse %>% group_by(species) %>% select(PopGrowth_mean, PopGrowth_lower, PopGrowth_upper),
+      n = 26)
+#Population growth by park
+print(qse %>% group_by(park) %>% arrange(park) %>% select(PopGrowth_mean, PopGrowth_lower, PopGrowth_upper),
+      n = 26)
+
+#Percent change by species
+print(qse %>% group_by(species) %>% select(Percent_change),
+      n = 26)
+#Percent change by park
+print(qse %>% group_by(park) %>% arrange(park) %>% select(Percent_change),
+      n = 26)
+
+
+#Quasi-extinction by species
+qse %>% group_by(species) %>% summarize(median(QSE_mean), max(QSE_mean))
+#Quasi-extinction by park
+qse %>% group_by(park) %>% summarize(median(QSE_mean), max(QSE_mean))
+
+
+#-----------------------------#
+#-Species-specific parameters-#
+#-----------------------------#
+
+omega0 <- data.frame(species = factor(c(spec.names, "community"), levels = c(spec.names, "community")), mean = c(plogis(output$statistics[grep("omega0", params),"Mean"]), output$statistics["mu.o0","Mean"]),
+                     l2.5 = c(plogis(output$quantiles[grep("omega0", params),"2.5%"]), output$quantiles["mu.o0","2.5%"]),
+                     l25 = c(plogis(output$quantiles[grep("omega0", params),"25%"]), output$quantiles["mu.o0","25%"]),
+                     u75 = c(plogis(output$quantiles[grep("omega0", params),"75%"]), output$quantiles["mu.o0","75%"]),
+                     u97.5 = c(plogis(output$quantiles[grep("omega0", params),"97.5%"]), output$quantiles["mu.o0","97.5%"]))
+
+omega1 <- data.frame(species = factor(c(spec.names, "community"), levels = c(spec.names, "community")), mean = c(output$statistics[grep("omega1", params),"Mean"], output$statistics["mu.o1","Mean"]),
+                     l2.5 = c(output$quantiles[grep("omega1", params),"2.5%"], output$quantiles["mu.o1","2.5%"]),
+                     l25 = c(output$quantiles[grep("omega1", params),"25%"], output$quantiles["mu.o1","25%"]),
+                     u75 = c(output$quantiles[grep("omega1", params),"75%"], output$quantiles["mu.o1","75%"]),
+                     u97.5 = c(output$quantiles[grep("omega1", params),"97.5%"], output$quantiles["mu.o1","97.5%"]))
+
+gamma0 <- data.frame(species = factor(c(spec.names, "community"), levels = c(spec.names, "community")), mean = c(exp(output$statistics[grep("gamma0", params),"Mean"]), exp(output$statistics["mu.g0","Mean"])),
+                     l2.5 = c(exp(output$quantiles[grep("gamma0", params),"2.5%"]), exp(output$quantiles["mu.g0","2.5%"])),
+                     l25 = c(exp(output$quantiles[grep("gamma0", params),"25%"]), exp(output$quantiles["mu.g0","25%"])),
+                     u75 = c(exp(output$quantiles[grep("gamma0", params),"75%"]), exp(output$quantiles["mu.g0","75%"])),
+                     u97.5 = c(exp(output$quantiles[grep("gamma0", params),"97.5%"]), exp(output$quantiles["mu.g0","97.5%"])))
+
+
+
+FigO1 <- ggplot(omega1) + 
+  geom_hline(yintercept = 0, col = "red") +
   geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
+                width = 0.3) +
+  geom_errorbar(aes(x = species, ymin = l2.5, ymax = u97.5),
+                width = 0, size = 1.25) +
+  geom_errorbar(aes(x = species, ymin = l25, ymax = u75),
+                width = 0, size = 3) +
+  coord_cartesian(ylim = c(-5, 5)) +
+  theme_few() +
+  theme(panel.background = element_rect(fill = "transparent", color = NA),
+        axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
+        legend.position = "none") +
+  labs(y ="Edge effect (log-scale)", x = expression()) +
+  geom_vline(xintercept=(13 - 0.5), linetype = "dotdash")
+
+
+#-----------------------------#
+#-Bayesian variable selection-#
+#-----------------------------#
+
+z1 <- data.frame(species = factor(c(spec.names, "community"), levels = c(spec.names, "community")), mean = c(output$statistics[grep("z1", params),"Mean"], output$statistics["psi1","Mean"]),
+                     l2.5 = c(output$quantiles[grep("z1", params),"2.5%"], output$quantiles["psi1","2.5%"]),
+                     l25 = c(output$quantiles[grep("z1", params),"25%"], output$quantiles["psi1","25%"]),
+                     u75 = c(output$quantiles[grep("z1", params),"75%"], output$quantiles["psi1","75%"]),
+                     u97.5 = c(output$quantiles[grep("z1", params),"97.5%"], output$quantiles["psi1","97.5%"]))
+
+FigZ1 <- ggplot() + 
+  geom_hline(yintercept = 0.5, col = "red") +
+  geom_point(data = z1, aes(x = species, y = mean),
+                size = 3, shape = 1) +
+  geom_errorbar(data = subset(z1, species == "community"), aes(x = species, ymin = mean, ymax = mean),
                 width = 0.275) +
+  geom_errorbar(data = subset(z1, species == "community"), aes(x = species, ymin = l2.5, ymax = u97.5),
+                width = 0, size = 1.25) +
+  geom_errorbar(data = subset(z1, species == "community"), aes(x = species, ymin = l25, ymax = u75),
+                width = 0, size = 3) +
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_few() +
+  theme(panel.background = element_rect(fill = "transparent", color = NA),
+        axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
+        legend.position = "none") +
+  labs(y ="Apparent survival probability", x = expression()) +
+  geom_vline(xintercept=(13 - 0.5), linetype = "dotdash")
+
+
+#----------#
+#-Figure 2-#
+#----------#
+
+#Load lat long
+sites <- NULL
+sheets <- excel_sheets("~/HMSNO/DataFormat/RawData/trap locations and dates.xlsx")
+for(i in 1:length(sheets)){
+  Temp <- read_excel(path = "~/HMSNO/DataFormat/RawData/trap locations and dates.xlsx", sheet = sheets[i])
+  Temp <- Temp %>% mutate(park = as.factor(sheets[i]),
+                          latitude = as.numeric(as.character(latitude)),
+                          longitude = as.numeric(as.character(longitude)),
+                          start_date = as.Date(start_date),
+                          end_date = as.Date(end_date)) 
+  sites <- bind_rows(sites, Temp)
+}
+
+sites <- as.factor()
+
+#Set coordinate system
+sites <- sites %>% 
+  drop_na("longitude"|"latitude") %>%
+  st_as_sf(coords = c("longitude", "latitude")) %>%
+  st_set_crs(4326)
+
+#Domain
+africa <- ne_countries(continent = "africa", returnclass = "sf")
+
+ggplot() +
+  geom_sf(data = africa) +
+  geom_sf(data = sites, aes(color = park), size = 3) +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        panel.grid = element_blank())
+
+
+#----------#
+#-Figure 3-#
+#----------#
+
+Fig3A <- ggplotGrob(ggplot(omega0) + 
+  geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
+                width = 0.3) +
   geom_errorbar(aes(x = species, ymin = l2.5, ymax = u97.5),
                 width = 0, size = 1.25) +
   geom_errorbar(aes(x = species, ymin = l25, ymax = u75),
@@ -203,84 +400,38 @@ FigO0 <- ggplot(omega0) +
   coord_cartesian(ylim = c(0, 1)) +
   theme_few() +
   theme(panel.background = element_rect(fill = "transparent", color = NA),
-        axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
         legend.position = "none") +
-  labs(y ="Apparent survival probability", x = expression())
+  labs(y = "Annual apparent\nsurvival probability", x = expression()) +
+  geom_vline(xintercept=(13 - 0.5), linetype = "dotdash"))
 
-
-FigO1 <- ggplot(omega1) + 
+Fig3B <- ggplotGrob(ggplot(gamma0) + 
   geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
-                width = 0.275) +
+                width = 0.3) +
   geom_errorbar(aes(x = species, ymin = l2.5, ymax = u97.5),
                 width = 0, size = 1.25) +
   geom_errorbar(aes(x = species, ymin = l25, ymax = u75),
                 width = 0, size = 3) +
-  coord_cartesian(ylim = c(-7, 7)) +
-  geom_hline(yintercept = 0, alpha = 0.75) +
+  coord_cartesian(ylim = c(0, 2)) +
   theme_few() +
   theme(panel.background = element_rect(fill = "transparent", color = NA),
         axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
         legend.position = "none") +
-  labs(y ="Effect of density", x = expression())
+  labs(y ="Annual number of individuals\ngained per site", x = expression()) +
+  geom_vline(xintercept=(13 - 0.5), linetype = "dotdash"))
 
-FigO2 <- ggplot(omega2) + 
-  geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
-                width = 0.275) +
-  geom_errorbar(aes(x = species, ymin = l2.5, ymax = u97.5),
-                width = 0, size = 1.25) +
-  geom_errorbar(aes(x = species, ymin = l25, ymax = u75),
-                width = 0, size = 3) +
-  coord_cartesian(ylim = c(-1.5, 1.5)) +
-  geom_hline(yintercept = 0, alpha = 0.75) +
-  theme_few() +
-  theme(panel.background = element_rect(fill = "transparent", color = NA),
-        axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
-        legend.position = "none") +
-  labs(y ="Effect of distance", x = expression())
+Fig3B$widths <- Fig3A$widths
 
-#-Single-species-#
+tiff(file = "~/HMSNO/PostAnalysis/Figure3.tiff", res = 600, width = 6.5, height = 5, units = "in")
+grid.arrange(arrangeGrob(Fig3A, Fig3B, ncol = 1, nrow = 2))
+grid.text("A", x = 0.15, y = 0.96)
+grid.text("B", x = 0.15, y = 0.46)
+dev.off()
 
-# species <- c("callipygus", "dorsalis", "harveyi", "leucogaster", "monticola", "nigrifrons")
-# names <- c("Peters's", "Bay", "Harvey's", "White-bellied", "Blue", "Black-fronted")
-# 
-# alpha0 <- beta0 <- beta1 <- beta2 <- beta3 <- 
-#   beta4 <- gamma0 <- omega0 <- omega1 <- omega2 <- omega3 <- rep(NA, 6)
-# 
-# for(i in 1:length(species)){
-#   load(file = paste("Z:/HMSNO/", species[i], ".Rdata", sep=""))
-#   output <- summary(as.mcmc.list(out))
-#   alpha0 <- rbind(alpha0, c("mean" = output$statistics[1,1], output$quantiles[1,]))
-#   beta0 <- rbind(beta0, c("mean" = output$statistics[3,1], output$quantiles[3,]))
-#   beta1 <- rbind(beta1, c("mean" = output$statistics[4,1], output$quantiles[4,]))
-#   beta2 <- rbind(beta2, c("mean" = output$statistics[5,1], output$quantiles[5,]))
-#   beta3 <- rbind(beta3, c("mean" = output$statistics[6,1], output$quantiles[6,]))
-#   beta4 <- rbind(beta4, c("mean" = output$statistics[7,1], output$quantiles[7,]))
-#   gamma0 <- rbind(gamma0, c("mean" = output$statistics[8,1], output$quantiles[8,]))
-#   omega0 <- rbind(omega0, c("mean" = output$statistics[9,1], output$quantiles[9,]))
-#   omega1 <- rbind(omega1, c("mean" = output$statistics[10,1], output$quantiles[10,]))
-#   omega2 <- rbind(omega2, c("mean" = output$statistics[11,1], output$quantiles[11,]))
-#   omega3 <- rbind(omega3, c("mean" = output$statistics[12,1], output$quantiles[12,]))
-# }
-# 
-# alpha0 <- alpha0[-1,]; beta0 <- beta0[-1,]; beta1 <- beta1[-1,]; beta2 <- beta2[-1,]; beta3 <- beta3[-1,]; beta4 <- beta4[-1,];
-# gamma0 <- gamma0[-1,]; omega0 <- omega0[-1,]; omega1 <- omega1[-1,]; omega2 <- omega2[-1,]; omega3 <- omega3[-1,]
-# 
-# out <- list(alpha0, beta0, beta1, beta2, beta3, beta4, gamma0, omega0, omega1, omega2, omega3)
-# 
-# for(i in 1:11){
-#   data.frame(species = names, out[[i]]) %>%
-#     ggplot(.) + 
-#     geom_errorbar(aes(x = species, ymin = mean, ymax = mean),
-#                   width = 0.275) +
-#     geom_errorbar(aes(x = species, ymin = X2.5., ymax = X97.5.),
-#                   width = 0, size = 1.25) +
-#     geom_errorbar(aes(x = species, ymin = X25., ymax = X75.),
-#                   width = 0, size = 3) +
-#     geom_hline(yintercept = 0, alpha = 0.75) +
-#     theme_few() +
-#     theme(panel.background = element_rect(fill = "transparent", color = NA),
-#           axis.text.x = element_text(angle = 50, hjust = 0.5, vjust = 0.5),
-#           legend.position = "none") +
-#     labs(y = expression(), x = expression())
-#   
-# }
+#----------#
+#-Figure 4-#
+#----------#
+
+Fig4A <- ggplotGrob(FigO1)
+Fig4B <- ggplotGrob(FigZ1)

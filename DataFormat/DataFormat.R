@@ -1,8 +1,6 @@
 #TODO:
 
-#nstart:nend would need to become ragged array skipping years when sampling doesn't occur at a site
-
-#Add UDZ other ungulates
+#precip in some reps covers 3 mos
 
 #----------------#
 #-Load Libraries-#
@@ -11,6 +9,7 @@
 library(readxl)
 library(tidyverse)
 library(reshape2)
+library(sf)
 
 #-----------#
 #-Load Data-#
@@ -98,6 +97,36 @@ SiteData <- bind_rows(SiteData, SiteData %>% filter(grepl("CT-UDZ", `deployment 
                days = read_excel("~/HMSNO/DataFormat/EditedData/UDZ_ungulates_2018_2019.xlsx", sheet = 4) %>%
                       select(trapdays) %>% .$trapdays))
 
+#Add gps data
+
+sites <- NULL
+sheets <- excel_sheets("~/HMSNO/DataFormat/RawData/trap locations and dates.xlsx")
+for(i in 1:length(sheets)){
+  Temp <- read_excel(path = "~/HMSNO/DataFormat/RawData/trap locations and dates.xlsx", sheet = sheets[i])
+  Temp <- Temp %>% mutate(latitude = as.numeric(as.character(latitude)),
+                          longitude = as.numeric(as.character(longitude)),
+                          start_date = as.Date(start_date),
+                          end_date = as.Date(end_date)) 
+  sites <- bind_rows(sites, Temp)
+}
+
+sites$deployment <- str_remove(sites$deployment, "CT-NNP-1-")
+sites$deployment <- str_remove(sites$deployment, "NNP-2015-")
+tmp <- sites$deployment[grep("TR", sites$deployment)]
+tmp[-grep("-", tmp)] <- gsub("(....)(.*)","\\1-\\2",tmp[-grep("-", tmp)])
+sites$deployment[grep("TR", sites$deployment)] <- tmp
+tmp <- sites$deployment[grep("TR-", sites$deployment)]
+tmp <- stringr::str_replace(tmp, "-", "")
+sites$deployment[grep("TR-", sites$deployment)] <- tmp
+sites <- sites %>% rename(`deployment ID` = deployment, Year = year)
+SiteData <- left_join(SiteData, sites, by = c("deployment ID", "Year"))
+
+#Set coordinate system
+SiteData <- SiteData %>% 
+  drop_na("longitude"|"latitude") %>%
+  st_as_sf(coords = c("longitude", "latitude")) %>%
+  st_set_crs(4326)
+
 #-------------#
 #-Format Data-#
 #-------------#
@@ -107,6 +136,9 @@ Data[,5:10] <- apply(Data[,5:10], 2, function(y) as.numeric(gsub("-", NA, y)))
 
 #Convert CT-UDZ-1-14.1 to CT-UDZ-1-14
 Data$`deployment ID`[Data$`deployment ID` == "CT-UDZ-1-14.1"] <- "CT-UDZ-1-14"
+
+#Remove CT-UDZ-3-21
+Data <- Data %>% filter(`deployment ID` != "CT-UDZ-3-21")
 
 #Reorder park levels
 # park.levels <- c("1" = "2", "2" = "3", "3" = "4", "4" = "1", "5" = "6", "6" = "5")
@@ -139,167 +171,150 @@ Data <- Data %>% mutate(R6 = replace(R6, which(days>=25 & is.na(R6)), 0), #Repla
                         R2 = replace(R2, which(days<5), NA),
                         R1 = replace(R1, which(days>0 & is.na(R1)), 0))
 
-# Data$days[is.na(Data$days)] <- 0 #Reset no sampling to zero days
+Data$days[is.na(Data$days)] <- 0 #Reset no sampling to zero days
 
 Data <- Data %>% drop_na(days) %>%
-  mutate(siteID = as.numeric(factor(`deployment ID`, levels = unique(`deployment ID`))),
-         parkID = as.numeric(park),
+  mutate(parkID = as.numeric(park),
          yearID = as.numeric(as.factor(Year)),
          specID = as.numeric(as.factor(species))) %>%
-  arrange(parkID, yearID, siteID)
+  group_by(parkID) %>%
+  mutate(siteID = as.numeric(factor(`deployment ID`, levels = unique(`deployment ID`)))) %>%
+  ungroup(parkID) %>%   
+  arrange(parkID, specID, siteID, yearID)
 
+#---------#
+#-Indices-#
+#---------#
 
-Data.vec <- Data %>% 
-  select(specID, parkID, siteID, yearID, ls(Data, pattern = "R")) %>%
-  melt(id = c("specID", "parkID", "siteID", "yearID"))
+#Number of species
+nspecs <- max(Data$specID)
+
+#Number of parks
+nparks <- max(Data$parkID)
+
+#First park for each park
+parkS <- as.numeric(Data %>% group_by(specID) %>%
+                      summarize(parkS = min(parkID) - min(Data$parkID) + 1) %>%
+                      select(parkS) %>% .$parkS)
+
+#Last park for each park
+parkE <- as.numeric(Data %>% group_by(specID) %>%
+                      summarize(parkE = max(parkID) - min(Data$parkID) + 1) %>%
+                      select(parkE) %>% .$parkE)
+#Max number of sites
+nsites <- max(Data$siteID)
+
+#Number of sites/park
+nsite <- as.numeric(Data %>% group_by(parkID) %>% 
+                      summarize(nsite = n_distinct(siteID)) %>%
+                      select(nsite) %>% .$nsite)
+
+#Number of years
+nyrs <- max(Data$yearID)
+
+#First year for each park
+nstart <- as.numeric(Data %>% group_by(parkID) %>%
+                       summarize(nstart = min(yearID) - min(Data$yearID) + 1) %>%
+                       select(nstart) %>% .$nstart)
+
+#Last year for each park
+nend <- as.numeric(Data %>% group_by(parkID) %>%
+                     summarize(nend = max(yearID) - min(Data$yearID) + 1) %>%
+                     select(nend) %>% .$nend)
+
+#Number of replicates
+nreps <- 6
+
+#Nested indices
+yr <- Data$yearID
+site <- Data$siteID
+park <- Data$parkID
+spec <- Data$specID
 
 #--------------#
 #-Extract data-#
 #--------------#
 
-# spec <- Data$specID
-# site <- Data$siteID
-# yr <- Data$yearID
+#Occupancy
+y <- array(NA, dim = c(nreps, nyrs, nsites, nparks, nspecs))
 
-spec <- Data.vec$specID
-site <- Data.vec$siteID
-yr <- Data.vec$yearID
-park <- as.numeric(Data %>% group_by(siteID) %>%
-        distinct(parkID) %>% select(parkID) %>% .$parkID)
-
-nspec <-  max(Data$specID)
-nparks <- max(park)
-nsites <- max(Data$siteID)
-nyrs <- max(Data$yearID)
-nreps <- 6
-nobs <- dim(Data.vec)[1]
-
-npark <- as.numeric(Data %>% group_by(specID) %>% 
-            summarize(npark = n_distinct(parkID)) %>%
-            select(npark) %>% .$npark)
-nsite <- as.numeric(Data %>% group_by(specID) %>% 
-            summarize(nsite = n_distinct(siteID)) %>%
-            select(nsite) %>% .$nsite)
-
-parkspec <- matrix(NA, nrow = nparks, ncol = nspec)
-sitespec <- matrix(NA, nrow = nsites, ncol = nspec)
-
-tmp1 <- as.matrix(Data %>% group_by(specID) %>% 
-       distinct(parkID) %>% arrange(specID, parkID))
-tmp2 <- as.matrix(Data %>% group_by(specID) %>%
-       distinct(siteID) %>% arrange(specID, siteID))
-k <- 1
-v <- 1
-for(s in 1:nspec){
-  for(i in 1:npark[s]){
-    parkspec[i,s] <- tmp1[k,1]
-    k <- k + 1
-  }
-  for(j in 1:nsite[s]){
-    sitespec[j,s] <- tmp2[v,1]
-    v <- v + 1
-  }
+for(i in 1:dim(Data)[1]){
+  y[1:6,yr[i],site[i],park[i],spec[i]] <- as.numeric(Data[i,5:10])
 }
 
-rm(tmp1, tmp2, k, v)
+#Covariates
 
-nstart <- as.numeric(Data %>% group_by(parkID, siteID) %>%
-          summarize(nstart = min(yearID) - min(Data$yearID) + 1) %>%
-          select(nstart) %>% .$nstart)
-nend <- as.numeric(Data %>% group_by(parkID, siteID) %>%
-        summarize(nend = max(yearID) - min(Data$yearID) + 1) %>%
-        select(nend) %>% .$nend)
-nyrstr <- as.numeric(Data %>% group_by(parkID) %>%
-          summarize(nyrstr = min(yearID) - min(Data$yearID) + 1) %>%
-          select(nyrstr) %>% .$nyrstr)
-nyrend <- as.numeric(Data %>% group_by(parkID) %>%
-          summarize(nyrend = max(yearID) - min(Data$yearID) + 1) %>%
-          select(nyrend) %>% .$nyrend)
-nsitestr <- as.numeric(Data %>% group_by(parkID) %>%
-            summarize(nsitestr = min(siteID)) %>%
-            select(nsitestr) %>% .$nsitestr)
-nsiteend <- matrix(data = NA, nrow = nyrs, ncol = nparks)
-for(t in 1:nyrs){
-  nsiteend[t,] <- as.numeric(Data %>% group_by(parkID) %>%
-                  summarize(nsiteend = max(siteID)) %>%
-                  select(nsiteend) %>% .$nsiteend)
+Cov <- Data %>% group_by(parkID, siteID, yearID) %>%
+  select(days, edge, elevation, geometry, start_date, end_date) %>% 
+  distinct(parkID, siteID, yearID, .keep_all = TRUE)
+
+days <- edge <- elevation <- array(NA, dim = c(nyrs, nsites, nparks))
+
+for(i in 1:dim(Cov)[1]){
+  days[Cov$yearID[i], Cov$siteID[i], Cov$parkID[i]] <- Cov$days[i]
+  edge[Cov$yearID[i], Cov$siteID[i], Cov$parkID[i]] <- Cov$edge[i]
+  elevation[Cov$yearID[i], Cov$siteID[i], Cov$parkID[i]] <- Cov$elevation[i]
 }
-
-for(t in nyrstr[3]:nyrend[3]){
-  nsiteend[t,3] <- as.numeric(Data %>% filter(parkID == 3 & yearID == t)%>%
-                   group_by(parkID) %>%
-                   summarize(nsiteend = max(siteID)) %>%
-                   select(nsiteend) %>% .$nsiteend)
-}
-
-#SKIP specific parks for a given species... 
-
-#SKIP specific years or reps for a given site...
-# as.numeric(Data %>% filter(days > 1) %>% 
-#              group_by(park, `deployment ID`) %>%
-#              summarize(nstart = min(Year) - min(Data$Year) + 1) %>%
-#              select(nstart) %>% .$nstart)
-
-occ <- Data.vec$value
-
-# occ <- array(NA, dim = c(nreps, nyrs, nsites, nspec))
-# 
-# for(s in 1:nspec){
-#   for(j in 1:nsites){
-#     #for(t in ifelse(nstart[j] == nend[j], nstart[j], nstart[j]:nend[j])){
-#     for(t in nstart[j]:nend[j]){
-#       occ[1:nreps,t,j,s] <- rep(0,nreps)
-#     }
-#   }
-# }
-# for(i in 1:dim(Data)[1]){
-#   for(k in 5:(nreps+5)){
-#     if(is.na(Data[i,k])){
-#       occ[k-4,yr[i],site[i],1:nspec] <- rep(NA, nspec)
-#     }
-#   }
-#   occ[1:6,yr[i],site[i],spec[i]] <- as.numeric(Data[i,5:10])
-# }
-
-
-
-Covariatedf <- Data %>% group_by(siteID, yearID) %>%
-  select(days, edge, elevation) %>% distinct(siteID, yearID, .keep_all = TRUE)
-
-days <- edge <- elevation <- array(NA, dim = c(nyrs, nsites))
-
-for(i in 1:dim(Covariatedf)[1]){
-  days[Covariatedf$yearID[i], Covariatedf$siteID[i]] <- Covariatedf$days[i]
-  edge[Covariatedf$yearID[i], Covariatedf$siteID[i]] <- Covariatedf$edge[i]
-  elevation[Covariatedf$yearID[i], Covariatedf$siteID[i]] <- Covariatedf$elevation[i]
-}
-
-density <- Data %>% group_by(siteID) %>%
-  select(density) %>% distinct() %>% .$density
 
 days <- (days - mean(days, na.rm = TRUE))/sd(days, na.rm = TRUE)
 edge <- (edge - mean(edge, na.rm = TRUE))/sd(edge, na.rm = TRUE)
 elevation <- (elevation - mean(elevation, na.rm = TRUE))/sd(elevation, na.rm = TRUE)
 
+#----------#
+#-Rainfall-#
+#----------#
 
-Effort <- Data %>%
-  group_by(parkID, yearID) %>%
-  summarize(nsite = n_distinct(siteID), days = sum(days))
+#Fix some overlap 3 months...
+
+Cov <- Cov %>% mutate(
+  str_mo = format(start_date, "%Y-%m"),
+  end_mo = format(end_date, "%Y-%m")
+)
+
+Geomdf <- Cov %>% drop_na(edge)
+Geomdf <- st_as_sf(Geomdf)
+
+Geomdf <- Geomdf %>% mutate(
+  str_precip = NA,
+  end_precip = NA
+)
+
+dates <- unique(c(substr(Geomdf$start_date, 1, 7), substr(Geomdf$end_date, 1, 7)))
+dates <- dates[!is.na(dates)]
+year <- substr(dates, 1, 4)
+month <- substr(dates, 6, 7)
+
+filenames <- list.files("~/HMSNO/DataFormat/CHIRPS/", pattern = "chirps", full.names = TRUE)
+for(i in 1:length(filenames)){
+  rainfall <- raster::raster(filenames[i])
+  raster::values(rainfall)[raster::values(rainfall) < 0] <- NA
+  Geomdf <- Geomdf %>% mutate(str_precip = ifelse(str_mo == dates[i], raster::extract(rainfall, .), str_precip),
+                            end_precip = ifelse(end_mo == dates[i], raster::extract(rainfall, .), end_precip))
+}
+
+Geomdf <- Geomdf %>% mutate(precip = (as.numeric(lubridate::ceiling_date(start_date, unit = "month") - start_date)*str_precip +
+                            as.numeric(end_date - lubridate::floor_date(end_date, unit = "month"))*end_precip)/
+                            as.numeric(end_date - start_date))
+Geomdf$precip[is.infinite(Geomdf$precip)] <- Geomdf$str_precip[is.infinite(Geomdf$precip)]
+
+precip <- array(NA, dim = c(nyrs, nsites, nparks))
+
+for(i in 1:dim(Geomdf)[1]){
+  precip[Geomdf$yearID[i], Geomdf$siteID[i], Geomdf$parkID[i]] <- Geomdf$precip[i]
+}
+
+precip <- (precip - mean(precip, na.rm = TRUE))/sd(precip, na.rm = TRUE)
 
 #--------------#
 #-Compile data-#
 #--------------#
 
-HMSNO.data <- list(y = occ, nstart = nstart, nend = nend, 
-                   park = park, elevation = elevation, edge = edge, density = density, days = days)
+HMSNO.data <- list(y = y, elevation = elevation, edge = edge, precip = precip)
 
-HMSNO.con <- list(nspec = nspec, nobs = nobs, nsitestr = nsitestr, nsiteend = nsiteend, 
-                  nyrstr = nyrstr, nyrend = nyrend, ns = nstart, ne = nend, nsite = nsite, npark = npark,
-                  parkspec = parkspec, sitespec = sitespec, spec = spec, site = site, yr = yr)
+HMSNO.con <- list(nspecs = nspecs, parkS = parkS, parkE = parkE,
+                  nsite = nsite, nreps = nreps, nstart = nstart, nend = nend)
 
-save(HMSNO.data, file = "~/HMSNO/DataFormat/HMSNO.data.Rdata")
+save(HMSNO.data, file = "~/HMSNO/DataFormat/HMSNO.Adata.Rdata")
 
-save(HMSNO.con, file = "~/HMSNO/DataFormat/HMSNO.con.Rdata")
-
-save(Effort, file = "~/HMSNO/DataFormat/Effort.Rdata")
+save(HMSNO.con, file = "~/HMSNO/DataFormat/HMSNO.Acon.Rdata")
 
