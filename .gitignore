@@ -22,3 +22,6 @@ $RECYCLE.BIN/
 # Operating System Files
 # =========================
 .Rproj.user
+
+*OldFiles*
+SimulationOutput/
