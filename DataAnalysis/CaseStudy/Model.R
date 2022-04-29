@@ -9,8 +9,8 @@ library(coda)
 #-Load Data-#
 #-----------#
 
-load(file = "../../DataFormat/HMSNO.Adata.Rdata")
-load(file = "../../DataFormat/HMSNO.Acon.Rdata")
+load(file = "~/HMSNO/DataFormat/HMSNO.data.Rdata")
+load(file = "~/HMSNO/DataFormat/HMSNO.con.Rdata")
 
 nspecs <- HMSNO.con$nspecs
 parkS <- HMSNO.con$parkS
@@ -25,89 +25,134 @@ nyrs <- max(nend)
 #-NIMBLE model-#
 #--------------#
 
-MSdyn.c <- nimbleCode({
+model.code <- nimbleCode({
   
-  mu.b0 ~ dnorm(0, 0.1)
-  tau.b0 ~ dgamma(0.1, 0.1)
-  mu.o0L <- logit(mu.o0)
-  mu.o0 ~ dunif(0, 1)
-  tau.o0 ~ dgamma(0.1, 0.1)
-  mu.g0 ~ dnorm(0, 0.1)
-  tau.g0 ~ dgamma(0.1, 0.1)
-  mu.a0 ~ dunif(0, 1)
-  mu.a0L <- logit(mu.a0)
-  tau.a0 ~ dgamma(0.1, 0.1)
+  #-Priors-#
+  
+  # Detection hyperparameters
+  mu.a0 ~ dunif(0, 1) # Community-level intercept on probability scale
+  mu.a0L <- logit(mu.a0) # Community-level intercept on logit scale
+  tau.a0 ~ dgamma(0.1, 0.1) # Community-level precision
+  
+  # Effect of effort (days sampled)
   alpha1 ~ dnorm(0, 0.1)
-  tau.eps.o ~ dgamma(0.1, 0.1)
+  
+  # Initial abundance hyperparameters
+  mu.b0 ~ dnorm(0, 0.1) # Community-level intercept on log scale
+  tau.b0 ~ dgamma(0.1, 0.1) # Community-level precision
+  
+  # Apparent survival hyperparameters
+  mu.o0 ~ dunif(0, 1) # Community-level intercept on probability scale
+  mu.o0L <- logit(mu.o0) # Community-level intercept on logit scale
+  tau.o0 ~ dgamma(0.1, 0.1) # Community-level precision
+  
+  # Gains hyperparameters
+  mu.g0 ~ dnorm(0, 0.1) # Community-level intercept on log scale
+  tau.g0 ~ dgamma(0.1, 0.1) # Community-level precision
+  
+  # Precison of park-level random effect on initial abundance
   tau.eps.l ~ dgamma(0.1, 0.1)
-  # tau.eps.g ~ dgamma(0.1, 0.1)
   
-  for(i in 1:nparks){
-    eps.o[i] ~ dnorm(0, tau.eps.o)
-    eps.l[i] ~ dnorm(0, tau.eps.l)
-    # eps.g[i] ~ dnorm(0, tau.eps.g)
-    
-    logit(park.surv[i]) <- mu.o0L + eps.o[i]
-    # log(park.gain[i]) <- mu.g0 + eps.g[i]
-  }
+  # Precison of park-level random effect on apparent survival
+  tau.eps.o ~ dgamma(0.1, 0.1)
   
-  for(s in 1:nspecs){
+  for(r in 1:nparks){
     
-    alpha0[s] ~ dnorm(mu.a0L, tau.a0)
-    beta0[s] ~ dnorm(mu.b0, tau.b0)
-    omega0[s] ~ dnorm(mu.o0L, tau.o0)
-    gamma0[s] ~ dnorm(mu.g0, tau.g0)
+    # Park-level random effect on initial abundance
+    eps.l[r] ~ dnorm(0, tau.eps.l)
     
-    for(i in parkS[s]:parkE[s]){
+    # Park-level random effect on apparent survival
+    eps.o[r] ~ dnorm(0, tau.eps.o)
+    
+    # Predicted community-level apparent survival for each park 
+    logit(park.surv[r]) <- mu.o0L + eps.o[r]
+    
+  } # End r
+  
+  for(i in 1:nspecs){
+    
+    # Species-specific intercept on detection
+    alpha0[i] ~ dnorm(mu.a0L, tau.a0)
+    
+    # Species-specific intercept on initial abundance
+    beta0[i] ~ dnorm(mu.b0, tau.b0)
+    
+    # Species-specific intercept on apparent survival
+    omega0[i] ~ dnorm(mu.o0L, tau.o0)
+    
+    # Species-specific intercept on gains
+    gamma0[i] ~ dnorm(mu.g0, tau.g0)
+    
+    for(r in parkS[i]:parkE[i]){
       
-      logit(pop.surv[i,s]) <- omega0[s] + eps.o[i]
-      # log(pop.gain[i,s]) <- gamma0[s] + eps.g[i]
+      # Predicted population-level apparent survival
+      logit(pop.surv[r,i]) <- omega0[i] + eps.o[r]
       
-      for(j in 1:nsite[i]){
+      for(j in 1:nsite[r]){
         
-        log(lambda[j,i,s]) <- beta0[s] + eps.l[i]
+        # Linear predictor for initial abundance
+        log(lambda[j,r,i]) <- beta0[i] + eps.l[r]
         
-        N[nstart[i],j,i,s] ~ dpois(lambda[j,i,s])
+        # Initial abundance
+        N[nstart[r],j,r,i] ~ dpois(lambda[j,r,i])
         
         for(k in 1:nreps){
           
-          logit(r[k,nstart[i],j,i,s]) <- alpha0[s] + alpha1 * days[k,nstart[i],j,i]
+          # Linear predictor for detection probability (in year 1)
+          logit(r[k,nstart[r],j,r,i]) <- alpha0[i] + alpha1 * days[k,nstart[r],j,i]
           
-          y[k,nstart[i],j,i,s] ~ dbern(p[k,nstart[i],j,i,s])
-          p[k,nstart[i],j,i,s] <- 1 - pow((1 - r[k,nstart[i],j,i,s]), N[nstart[i],j,i,s])
+          # Observation process (in year 1)
+          y[k,nstart[r],j,r,i] ~ dbern(p[k,nstart[r],j,r,i])
           
-        }#end k
+          # Site level detection (N-occupancy parameterization) (in year 1)
+          p[k,nstart[r],j,r,i] <- 1 - pow((1 - r[k,nstart[r],j,r,i]), N[nstart[r],j,r,i])
+          
+        } # End k
         
-        for(t in (nstart[i]+1):nend[i]){
+        for(t in (nstart[r]+1):nend[r]){
           
           for(k in 1:nreps){
             
-            logit(r[k,t,j,i,s]) <- alpha0[s] + alpha1 * days[k,t,j,i]
+            # Linear predictor for detection probability (in year t+1)
+            logit(r[k,t,j,r,i]) <- alpha0[i] + alpha1 * days[k,t,j,i]
             
-            y[k,t,j,i,s] ~ dbern(p[k,t,j,i,s])
-            p[k,t,j,i,s] <- 1 - pow((1 - r[k,t,j,i,s]), N[t,j,i,s])
+            # Observation process (in year t+1)
+            y[k,t,j,r,i] ~ dbern(p[k,t,j,r,i])
             
-          }#end k
+            # Observation process (in year t+1)
+            p[k,t,j,r,i] <- 1 - pow((1 - r[k,t,j,r,i]), N[t,j,r,i])
+            
+          } # End k
           
+          # Linear predictor for apparent survival
+          logit(omega[t-1,j,r,i]) <- omega0[i] + eps.o[r]
           
-          logit(omega[t-1,j,i,s]) <- omega0[s] + eps.o[i]
+          # Biological process
+          N[t,j,r,i] <- S[t-1,j,r,i] + G[t-1,j,r,i]
           
-          N[t,j,i,s] <- S[t-1,j,i,s] + G[t-1,j,i,s]
-          S[t-1,j,i,s] ~ dbin(omega[t-1,j,i,s], N[t-1,j,i,s])
-          G[t-1,j,i,s] ~ dpois(gamma[t-1,j,i,s])
+          # Apparent survival
+          S[t-1,j,r,i] ~ dbin(omega[t-1,j,r,i], N[t-1,j,r,i])
           
-          log(gamma[t-1,j,i,s]) <- gamma0[s] #+ eps.g[i]
+          # Gains
+          G[t-1,j,r,i] ~ dpois(gamma[t-1,j,r,i])
           
-        }#end t
-      }#end j
+          # Linear predictor for gains
+          log(gamma[t-1,j,r,i]) <- gamma0[i]
+          
+        } # End t
+        
+      } # End j
       
-      for(t in nstart[i]:nend[i]){
+      for(t in nstart[r]:nend[r]){
         
-        Npark[t,i,s] <- sum(N[t,1:nsite[i],i,s])
+        # Population (species-park) abundance per year 
+        Nhat[t,r,i] <- sum(N[t,1:nsite[r],r,i])
         
-      }#end t
-    }#end i
-  }#end s
+      } # End t
+      
+    } # End r
+    
+  } # End s
   
 })
 
@@ -128,12 +173,12 @@ Nst <- array(NA, dim = dim1)
 Sst <- array(NA, dim = dim2)
 Gst <- array(NA, dim = dim2)
 
-for(s in 1:nspecs){
-  for(i in parkS[s]:parkE[s]){
-    for(j in 1:nsite[i]){
-      Nst[nstart[i],j,i,s] <- 10
-      Sst[nstart[i]:(nend[i]-1),j,i,s] <- 5
-      Gst[nstart[i]:(nend[i]-1),j,i,s] <- 2
+for(i in 1:nspecs){
+  for(r in parkS[i]:parkE[i]){
+    for(j in 1:nsite[r]){
+      Nst[nstart[r],j,r,i] <- 10
+      Sst[nstart[r]:(nend[r]-1),j,r,i] <- 5
+      Gst[nstart[r]:(nend[r]-1),j,r,i] <- 2
     }
   }
 }
@@ -228,17 +273,6 @@ eps.o.fun <- function(){
   return(eps.o)
 }
 
-# eps.g.fun <- function(){
-#   eps.g <- NULL
-#   eps.g[1] <- runif(1, -1, 1)
-#   eps.g[2] <- runif(1, -1, 1)
-#   eps.g[3] <- runif(1, -1, 1)
-#   eps.g[4] <- runif(1, -1, 1)
-#   eps.g[5] <- runif(1, -1, 1)
-#   eps.g[6] <- runif(1, -1, 1)
-#   return(eps.g)
-# }
-
 inits <- function()list(N=Nst, S=Sst, G=Gst,
                         mu.a0 = runif(1, 0.15, 0.3), tau.a0 = runif(1, 1, 3),
                         mu.b0 = runif(1, -2, 1), tau.b0 = runif(1, 0.2, 0.4),
@@ -250,42 +284,27 @@ inits <- function()list(N=Nst, S=Sst, G=Gst,
                         omega0 = omega0.fun(), 
                         eps.l = eps.l.fun(), 
                         eps.o = eps.o.fun(),
-                        # eps.g = eps.g.fun(),
                         tau.eps.l = runif(1, 0, 1),
                         tau.eps.o = runif(1, 0, 1)
-                        # tau.eps.g = runif(1, 0, 1) 
 )
 
-#Parameters to save
-params <- c("mu.a0",  
-            "tau.a0", 
-            "mu.b0",  
-            "tau.b0", 
-            "mu.o0",
-            "tau.o0",
-            "mu.g0",
-            "tau.g0",
-            "alpha0",
-            "alpha1",
-            "beta0",
-            "omega0",
-            "gamma0",
-            "eps.l",
-            "eps.o",
-            # "eps.g",
-            "tau.eps.l",
-            "tau.eps.o",
-            # "tau.eps.g",
-            "park.surv",
-            # "park.gain",
-            "pop.surv",
-            # "pop.gain",
-            "Npark") 
+#--------------------#
+#-Parameters to save-#
+#--------------------#
 
-#MCMC settings
-MSdyn.m <- nimbleModel(MSdyn.c, constants = HMSNO.con, data = Data, inits = inits())
+params <- c("mu.a0", "tau.a0", "alpha0", "alpha1",
+            "mu.b0", "tau.b0", "beta0", "eps.l", "tau.eps.l",
+            "mu.o0", "tau.o0", "omega0", "eps.o", "tau.eps.o",
+            "mu.g0", "tau.g0", "gamma0",
+            "park.surv", "pop.surv", "Npark") 
 
-MCMCconf <- configureMCMC(MSdyn.m, monitors = params)
+#---------------#
+#-MCMC settings-#
+#---------------#
+
+model <- nimbleModel(model.code, constants = HMSNO.con, data = Data, inits = inits())
+
+MCMCconf <- configureMCMC(model, monitors = params)
 
 
 MCMCconf$addSampler(target = c("beta0[3]", "beta0[6]", "beta0[9]", "beta0[10]", "eps.l[1]"),
@@ -306,19 +325,9 @@ MCMCconf$addSampler(target = c("omega0[1]", "omega0[2]", "omega0[4]", "omega0[5]
 MCMCconf$addSampler(target = c("omega0[5]", "omega0[8]", "omega0[12]", "eps.o[6]"),
                     type = "AF_slice")
 
-# MCMCconf$addSampler(target = c("gamma0[3]", "gamma0[6]", "gamma0[9]", "gamma0[10]", "eps.g[1]"),
-#                     type = "AF_slice")
-# 
-# MCMCconf$addSampler(target = c("gamma0[1]", "gamma0[2]", "gamma0[4]", "gamma0[5]", "gamma0[11]", "eps.g[5]"),
-#                     type = "AF_slice")
-# 
-# MCMCconf$addSampler(target = c("gamma0[5]", "gamma0[8]", "gamma0[12]", "eps.g[6]"),
-#                     type = "AF_slice")
-
-
 MCMC <- buildMCMC(MCMCconf)
 
-MSdyn.comp <- compileNimble(MSdyn.m, MCMC)
+model.comp <- compileNimble(model, MCMC)
 
 ni <- 100000
 nb <- 75000
@@ -326,10 +335,9 @@ nc <- 1
 nt <- 25
 
 #Run NIMBLE model
-# invisible(capture.output(MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)))
-MSdyn.o <- runMCMC(MSdyn.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)
+out <- runMCMC(model.comp$MCMC, niter = ni, nburnin = nb, nchains = nc, thin = nt, samplesAsCodaMCMC = TRUE)
 
 #-Save output-#
-ID <- paste("chain", length(list.files(pattern = "chain", full.names = FALSE)) + 1, sep="")
-assign(ID, MSdyn.o)
+ID <- paste("chain", length(list.files(path = "~/HMSNO/DataAnalysis/CaseStudy", pattern = "chain", full.names = FALSE)) + 1, sep="")
+assign(ID, out)
 save(list = ID, file = paste0(ID, ".Rds"))
