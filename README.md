@@ -4,7 +4,7 @@
 
 ### Conservation Biology
 
-### Code/Data DOI: [![DOI]()]()
+### Code/Data DOI: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6513044.svg)](https://doi.org/10.5281/zenodo.6513044)
 
 ### Please contact the first author for questions about the code or data: Matthew T. Farr (matthewtfarr@gmail.com)
 __________________________________________________________________________________________________________________________________________
