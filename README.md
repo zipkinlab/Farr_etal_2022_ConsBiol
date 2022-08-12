@@ -1,10 +1,10 @@
-# [Quantifying the conservation status and abundance trends of wildlife communities with detection-nondetection data]()
+# [Quantifying the conservation status and abundance trends of wildlife communities with detection-nondetection data](https://conbio.onlinelibrary.wiley.com/doi/10.1111/cobi.13934)
 
 ### [Matthew T. Farr](https://farrmt.github.io/), Timothy O'Brien, Charles B. Yackulic, & [Elise F. Zipkin](https://zipkinlab.org/)
 
 ### Conservation Biology
 
-### Code/Data DOI: [![DOI]()]()
+### Code/Data DOI: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6513044.svg)](https://doi.org/10.5281/zenodo.6513044)
 
 ### Please contact the first author for questions about the code or data: Matthew T. Farr (matthewtfarr@gmail.com)
 __________________________________________________________________________________________________________________________________________
