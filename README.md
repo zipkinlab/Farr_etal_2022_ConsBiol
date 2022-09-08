@@ -23,6 +23,6 @@ Effective conservation requires understanding species’ abundance patterns and 
 See the following subdirectories for data and metadata: [DataFormat/RawData](./DataFormat/RawData)  
 
 ## Code
-See the following subdirectories for code and metadata: [DataAnalysis](./DataAnalysis), [DataFormat](./DataFormat), [PostAnalysis](./PostAnalysis), [SupportingInformation](./SupportingInformation)
+See the following subdirectories for code and metadata: [DataAnalysis](./DataAnalysis), [DataFormat](./DataFormat), [PostAnalysis](./PostAnalysis)
 
 
