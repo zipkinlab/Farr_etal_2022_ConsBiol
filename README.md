@@ -17,11 +17,10 @@ Effective conservation requires understanding species’ abundance patterns and 
 ### [DataAnalysis](./DataAnalysis): Contains code for modeling, analysis, and results for both the simulation and case studies
 ### [DataFormat](./DataFormat): Contains raw data, code to format raw data for analysis, and formatted data
 ### [PostAnalysis](./PostAnalysis): Contains code to create tables & figures
-### [SupportingInformation](./SupportingInformation): Contains supporting information and code to generate supporting information
 ### [ConservationBiology-2022-Farr](./ConservationBiology-2022-Farr.pdf): PDF of published paper
 
 ## Data
-See the following subdirectories for data and metadata: [DataFormatting/RawData](./DataFormatting/RawData)  
+See the following subdirectories for data and metadata: [DataFormat/RawData](./DataFormat/RawData)  
 
 ## Code
 See the following subdirectories for code and metadata: [DataAnalysis](./DataAnalysis), [DataFormatting](./DataFormatting), [PostAnalysis](./PostAnalysis), [SupportingInformation](./SupportingInformation)
